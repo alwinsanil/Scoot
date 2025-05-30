@@ -3,4 +3,4 @@ Terraform/.terraform.tfstate.backup
 Terraform/.terraform.lock.hcl
 Terraform/.terraform/*
 
-dalscooter-frontend/node_modules
+Frontend/node_modules
