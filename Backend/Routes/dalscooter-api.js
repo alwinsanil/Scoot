@@ -78,14 +78,7 @@ function handleGuestRequest(pathParts, method, queryParams, body) {
     // Extract the specific guest endpoint (pathParts[2] if path is /guest/endpoint)
     const endpoint = pathParts.length > 2 ? pathParts[2] : null;
     
-    if (endpoint === 'register') {
-        return {
-            endpoint: 'guest/register',
-            method: method,
-            message: 'Guest registration endpoint',
-            action: method === 'POST' ? 'Process registration' : 'Get registration info'
-        };
-    } else if (endpoint === 'scooters') {
+    if (endpoint === 'scooters') {
         return {
             endpoint: 'guest/scooters',
             method: method,
