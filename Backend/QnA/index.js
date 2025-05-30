@@ -1,0 +1,1 @@
+//Logic for QnA lambda
