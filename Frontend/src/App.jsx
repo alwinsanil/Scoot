@@ -6,7 +6,7 @@ function App() {
   const auth = useAuth();
 
   const signOutRedirect = () => {
-    const clientId = "5argfdus7ko21r5cvde174phvh";
+    const clientId = "1q349s6cn8aqveuh0aumriq9op";
     const logoutUri = "http://localhost:3000";
     const cognitoDomain = "https://dalscooter-auth.auth.us-east-1.amazoncognito.com";
     window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;

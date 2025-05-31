@@ -91,7 +91,7 @@ resource "aws_cognito_user_pool_client" "client" {
   user_pool_id = aws_cognito_user_pool.dalscooter.id
 
   # App client settings
-  generate_secret = false
+  generate_secret = true
   
   # OAuth settings
   callback_urls = ["http://localhost:3000/callback"]
