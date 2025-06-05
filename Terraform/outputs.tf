@@ -4,11 +4,6 @@ output "dalscooter_api_url" {
   value       = module.api_gateway.api_url
 }
 
-output "dalscooter_lambda_name" {
-  description = "Dalscooter Lambda function name"
-  value       = module.lambda.lambda_function_name
-}
-
 output "dalscooter_api_id" {
   description = "Dalscooter API Gateway ID"
   value       = module.api_gateway.api_id

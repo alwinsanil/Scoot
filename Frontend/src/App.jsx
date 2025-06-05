@@ -6,9 +6,9 @@ function App() {
   const auth = useAuth();
 
   const signOutRedirect = () => {
-    const clientId = "1q349s6cn8aqveuh0aumriq9op";
-    const logoutUri = "http://localhost:3000";
-    const cognitoDomain = "https://dalscooter-auth.auth.us-east-1.amazoncognito.com";
+    const clientId = "6s31q2qjl5ja7hdbiho44iti7g";
+    const logoutUri = "https://o18p4bnhh8.execute-api.us-east-1.amazonaws.com/dev/auth/logout";
+    const cognitoDomain = "https://dalscooter-auth-91591.auth.us-east-1.amazoncognito.com";
     window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
   };
 
