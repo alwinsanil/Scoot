@@ -4,6 +4,15 @@ const axios = require('axios');
 
 const dynamoClient = new AWS.DynamoDB.DocumentClient();
 
+const WORD_BANK = [
+    'apple', 'bread', 'chair', 'drink', 'eagle',
+    'flame', 'grape', 'house', 'ideal', 'jolly',
+    'knife', 'lemon', 'mango', 'noble', 'ocean',
+    'plant', 'queen', 'river', 'stone', 'train',
+    'unity', 'vivid', 'wheat', 'xenon', 'yield', 'zebra'
+];
+
+
 exports.handler = async (event) => {
     try {
         const path = event.path || event.rawPath; // fallback if event.path is undefined
@@ -199,12 +208,12 @@ async function handleQna(event) {
 
     // Check if user has existing Q&A answers
     const existingAnswers = await getUserQnaAnswers(session.userId);
-    
+
     if (!existingAnswers) {
         // First time signup - store the Q&A answers
         try {
             await storeQnaAnswers(session.userId, answers);
-            
+
             // Update session to mark step 2 as complete
             await dynamoClient.update({
                 TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
@@ -240,17 +249,27 @@ async function handleQna(event) {
             };
         }
 
-        // Update session
+        const randomWord = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
+        const randomShift = Math.floor(Math.random() * 25) + 1; // shift between 1 and 25
+        const cipherChallenge = caesarShift(randomWord, randomShift);
+
+        // Store cipher challenge and answer shift in DynamoDB (or update session)
         await dynamoClient.update({
             TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
             Key: { tempToken },
-            UpdateExpression: 'SET step2Complete = :true',
-            ExpressionAttributeValues: { ':true': true }
+            UpdateExpression: 'SET step2Complete = :true, cipherOriginal = :word, cipherShift = :shift, cipherChallenge = :challenge',
+            ExpressionAttributeValues: {
+                ':true': true,
+                ':word': randomWord,
+                ':shift': randomShift,
+                ':challenge': cipherChallenge
+            }
         }).promise();
 
+        // Return the challenge with the response
         return {
             statusCode: 200,
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
@@ -259,8 +278,9 @@ async function handleQna(event) {
             body: JSON.stringify({
                 tempToken,
                 nextStep: 'cipher',
-                message: 'Step 2 complete. Please proceed to cipher verification.',
-                isFirstTimeSetup: false
+                cipherChallenge,
+                message: 'Step 2 complete. Please solve the cipher challenge.',
+                isFirstTimeSetup: !existingAnswers // keep your existing logic here
             })
         };
     }
@@ -293,8 +313,13 @@ async function handleCipher(event) {
         };
     }
 
-    // Verify cipher
-    const isCipherValid = await verifyCipherResponse(session.userId, cipherResponse);
+    // Verify cipher by passing original word and shift stored in session
+    const cipherData = {
+        cipherOriginal: session.cipherOriginal,
+        cipherShift: session.cipherShift
+    };
+
+    const isCipherValid = verifyCipherLogic(cipherResponse, cipherData);
     if (!isCipherValid) {
         throw {
             statusCode: 403,
@@ -302,7 +327,7 @@ async function handleCipher(event) {
         };
     }
 
-    // All steps complete - return actual Cognito tokens
+    // All steps complete - delete session and return tokens
     await dynamoClient.delete({
         TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
         Key: { tempToken }
@@ -319,6 +344,7 @@ async function handleCipher(event) {
         })
     };
 }
+
 
 async function handleStatus(event) {
     const { tempToken } = event.queryStringParameters || {};
@@ -354,6 +380,33 @@ async function handleStatus(event) {
 // =====================
 // Helper Functions
 // =====================
+
+// Caesar cipher encode function
+function caesarShift(word, shift) {
+    return word.split('').map(char => {
+        const code = char.charCodeAt(0);
+        if (code >= 97 && code <= 122) { // a-z
+            return String.fromCharCode(((code - 97 + shift) % 26) + 97);
+        }
+        return char;
+    }).join('');
+}
+
+// Caesar cipher decode function
+function caesarUnshift(word, shift) {
+    return caesarShift(word, (26 - shift) % 26);
+}
+
+function verifyCipherLogic(userResponse, cipherData) {
+    const { cipherOriginal, cipherShift } = cipherData;
+
+    // Decode user's response by shifting backward
+    const decodedResponse = caesarUnshift(userResponse.toLowerCase().trim(), cipherShift);
+
+    // Compare with original word
+    return decodedResponse === cipherOriginal;
+}
+
 
 function generateTempToken() {
     return crypto.randomBytes(32).toString('hex');
