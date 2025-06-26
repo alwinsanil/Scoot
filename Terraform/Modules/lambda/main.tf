@@ -21,7 +21,7 @@ resource "aws_lambda_function" "auth_api" {
       COGNITO_CLIENT_ID     = "5bc52eofgvj1latldpn713d0g7"
       COGNITO_CLIENT_SECRET = "1ivrasn4f1sqhq0inifk6q28dof0buu1vq7ls8a2o40eh499uml2"
       COGNITO_DOMAIN        = "dalscooter-auth-16840.auth.us-east-1.amazoncognito.com"
-      REDIRECT_URI          = "http://localhost:5173/auth/callback"
+      REDIRECT_URI          = "https://yu48pvemy7.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
     }
   }
 
