@@ -238,19 +238,36 @@ async function handleQna(event) {
                 })
             };
         } catch (error) {
-            throw {
-                statusCode: 500,
-                message: 'Failed to store Q&A answers',
-                details: error.message
+            return {
+                statusCode: error.statusCode || 500,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+                },
+                body: JSON.stringify({
+                    error: error.message || 'Internal server error',
+                    ...(error.details && { details: error.details })
+                })
             };
         }
     } else {
         // Existing user - verify Q&A answers
         const isQnaValid = await verifyQnaAnswers(session.userId, answers);
         if (!isQnaValid) {
-            throw {
-                statusCode: 403,
-                message: 'Q&A verification failed'
+            return {
+                statusCode: error.statusCode || 500,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+                },
+                body: JSON.stringify({
+                    error: error.message || 'Internal server error',
+                    ...(error.details && { details: error.details })
+                })
             };
         }
 

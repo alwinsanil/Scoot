@@ -24,12 +24,12 @@ const LoginSignupPage = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const encodedData = urlParams.get('data');
     const error = urlParams.get('error');
-    
+
     if (encodedData) {
       try {
         const authResponse = JSON.parse(atob(encodedData));
         setAuthData(authResponse);
-        
+
         if (authResponse.nextStep === 'qna') {
           setCurrentStep('qna');
           // Check if this is likely a first-time setup based on the auth flow
@@ -66,16 +66,16 @@ const LoginSignupPage = () => {
       return;
     }
 
+    const answersArray = qnaQuestions.map(q => qnaAnswers[q.id].trim());
+
     try {
       const response = await fetch('https://yu48pvemy7.execute-api.us-east-1.amazonaws.com/dev/auth/qna', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tempToken: authData?.tempToken,
-          answers: qnaAnswers
-        })
+          answers: answersArray
+        }),
       });
 
       const result = await response.json();
@@ -84,20 +84,15 @@ const LoginSignupPage = () => {
         throw new Error(result.message || 'Q&A verification failed');
       }
 
-      // Update auth data with the response
       setAuthData(result);
       setIsFirstTimeSetup(result.isFirstTimeSetup);
 
-      // Check next step
       if (result.nextStep === 'cipher') {
-        // For now, we'll show success and could redirect to cipher step
         alert(`${result.message}\n\nNext step: ${result.nextStep}`);
-        // In a real app, you might redirect to the cipher verification step
-        // setCurrentStep('cipher');
+        // Optionally move to next step here
       } else {
         alert('Authentication complete!');
       }
-      
     } catch (err) {
       setError(err.message || 'Q&A verification failed. Please try again.');
       console.error('Q&A submission error:', err);
@@ -105,6 +100,7 @@ const LoginSignupPage = () => {
       setIsLoading(false);
     }
   };
+
 
   const handleQnaChange = (question, answer) => {
     setQnaAnswers(prev => ({
@@ -139,9 +135,8 @@ const LoginSignupPage = () => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
           <div className="text-center mb-8">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-              isFirstTimeSetup ? 'bg-green-100' : 'bg-blue-100'
-            }`}>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${isFirstTimeSetup ? 'bg-green-100' : 'bg-blue-100'
+              }`}>
               {isFirstTimeSetup ? (
                 <UserPlus className={`w-8 h-8 ${isFirstTimeSetup ? 'text-green-600' : 'text-blue-600'}`} />
               ) : (
@@ -152,7 +147,7 @@ const LoginSignupPage = () => {
               {isFirstTimeSetup ? 'Setup Security Questions' : 'Security Verification'}
             </h1>
             <p className="text-gray-600">
-              {isFirstTimeSetup 
+              {isFirstTimeSetup
                 ? 'Please set up your security questions for future logins'
                 : 'Please answer your security questions to continue'
               }
@@ -194,13 +189,12 @@ const LoginSignupPage = () => {
               <button
                 onClick={handleQnaSubmit}
                 disabled={isLoading || !allQuestionsAnswered}
-                className={`w-full font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                  allQuestionsAnswered && !isLoading
-                    ? isFirstTimeSetup 
+                className={`w-full font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 ${allQuestionsAnswered && !isLoading
+                    ? isFirstTimeSetup
                       ? 'bg-green-600 hover:bg-green-700 text-white'
                       : 'bg-blue-600 hover:bg-blue-700 text-white'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
+                  }`}
               >
                 {isLoading ? (
                   <>
@@ -251,8 +245,8 @@ const LoginSignupPage = () => {
             {authMode === 'signup' ? 'Create Account' : 'Welcome Back'}
           </h1>
           <p className="text-gray-600">
-            {authMode === 'signup' 
-              ? 'Create a new account using AWS Cognito' 
+            {authMode === 'signup'
+              ? 'Create a new account using AWS Cognito'
               : 'Sign in to your account using AWS Cognito'
             }
           </p>
@@ -262,21 +256,19 @@ const LoginSignupPage = () => {
         <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
           <button
             onClick={() => setAuthMode('login')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              authMode === 'login'
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'login'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             Sign In
           </button>
           <button
             onClick={() => setAuthMode('signup')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              authMode === 'signup'
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'signup'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             Sign Up
           </button>
@@ -313,7 +305,7 @@ const LoginSignupPage = () => {
                 Sign in with AWS Cognito
               </button>
             )}
-            
+
             <div className="text-center">
               <p className="text-sm text-gray-500">
                 Secure authentication powered by AWS Cognito
