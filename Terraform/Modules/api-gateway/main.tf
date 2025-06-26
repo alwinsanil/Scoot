@@ -73,6 +73,11 @@ resource "aws_api_gateway_method" "auth_any" {
   resource_id   = aws_api_gateway_resource.auth_proxy.id
   http_method   = "ANY"
   authorization = "NONE"
+
+  request_parameters = {
+  "method.request.querystring.code"  = false
+  "method.request.querystring.state" = false
+  }
 }
 
 resource "aws_api_gateway_integration" "auth_integration" {
