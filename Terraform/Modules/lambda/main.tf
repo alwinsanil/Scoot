@@ -18,10 +18,10 @@ resource "aws_lambda_function" "auth_api" {
       PROJECT_NAME          = var.project_name
       ENVIRONMENT           = var.environment
       LOG_LEVEL             = "INFO"
-      COGNITO_CLIENT_ID     = "5bc52eofgvj1latldpn713d0g7"
-      COGNITO_CLIENT_SECRET = "1ivrasn4f1sqhq0inifk6q28dof0buu1vq7ls8a2o40eh499uml2"
-      COGNITO_DOMAIN        = "dalscooter-auth-16840.auth.us-east-1.amazoncognito.com"
-      REDIRECT_URI          = "https://yu48pvemy7.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+      COGNITO_CLIENT_ID     = "3tcb78k8ksrv41965lh8hfpqla"
+      COGNITO_CLIENT_SECRET = "1mgminem2rb2rmlurnpvphn6g6eghnq4read2i020jj7mijmdbvm"
+      COGNITO_DOMAIN        = "dalscooter-auth-21645.auth.us-east-1.amazoncognito.com"
+      REDIRECT_URI          = "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
     }
   }
 
@@ -127,4 +127,3 @@ resource "aws_cloudwatch_log_group" "user_lambda_logs" {
   name              = "/aws/lambda/${aws_lambda_function.user_api.function_name}"
   retention_in_days = 7
 }
-

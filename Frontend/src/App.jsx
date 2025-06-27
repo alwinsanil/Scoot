@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertCircle, Lock, User, ArrowRight, Loader2, UserPlus, CheckCircle } from 'lucide-react';
 
 const LoginSignupPage = () => {
@@ -12,12 +12,14 @@ const LoginSignupPage = () => {
 
   // AWS Cognito Configuration
   const cognitoConfig = {
-    clientId: '5bc52eofgvj1latldpn713d0g7',
-    redirectUri: 'https://yu48pvemy7.execute-api.us-east-1.amazonaws.com/dev/auth/callback',
-    authUrl: 'https://dalscooter-auth-16840.auth.us-east-1.amazoncognito.com/oauth2/authorize',
-    signupUrl: 'https://dalscooter-auth-16840.auth.us-east-1.amazoncognito.com/signup',
+    clientId: '3tcb78k8ksrv41965lh8hfpqla',
+    redirectUri: "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback",
+    authUrl: 'https://dalscooter-auth-21645.auth.us-east-1.amazoncognito.com/oauth2/authorize',
+    signupUrl: 'https://dalscooter-auth-21645.auth.us-east-1.amazoncognito.com/signup',
     scope: 'email openid profile'
   };
+
+  const redirectBaseUri = 'https://tupiqo0472.execute-api.us-east-1.amazonaws.com';
 
   // Check for auth data from POST redirect handler
   useEffect(() => {
@@ -69,7 +71,7 @@ const LoginSignupPage = () => {
     const answersArray = qnaQuestions.map(q => qnaAnswers[q.id].trim());
 
     try {
-      const response = await fetch('https://yu48pvemy7.execute-api.us-east-1.amazonaws.com/dev/auth/qna', {
+      const response = await fetch(`${redirectBaseUri}/dev/auth/qna`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

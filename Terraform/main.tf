@@ -25,6 +25,7 @@ data "aws_iam_role" "lab_role" {
 module "cognito" {
   source                 = "./modules/cognito"
   cognito_user_pool_name = var.cognito_user_pool_name
+  api_url = module.api_gateway.api_url
 }
 
 # Lambda module
