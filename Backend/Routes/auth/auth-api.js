@@ -141,7 +141,7 @@ async function handleCallback(event) {
             
             // Redirect to React app after a short delay
             setTimeout(() => {
-                window.location.href = \`http://localhost:5173/callback?data=\${dataString}\`;
+                window.location.href = \`http://localhost:5173/auth/qna/callback?data=\${dataString}\`;
             }, 1500);
         });
     </script>
