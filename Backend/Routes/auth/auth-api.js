@@ -1,6 +1,7 @@
 const AWS = require('aws-sdk');
 const crypto = require('crypto');
 const axios = require('axios');
+const { buildResponse, buildHtmlResponse } = require('./utils/response');
 
 const dynamoClient = new AWS.DynamoDB.DocumentClient();
 
@@ -11,7 +12,6 @@ const WORD_BANK = [
     'plant', 'queen', 'river', 'stone', 'train',
     'unity', 'vivid', 'wheat', 'xenon', 'yield', 'zebra'
 ];
-
 
 exports.handler = async (event) => {
     try {
@@ -37,22 +37,19 @@ exports.handler = async (event) => {
                 return await handleStatus(event);
 
             default:
-                return {
-                    statusCode: 404,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ error: 'Endpoint not found' })
-                };
+                return buildResponse(404, { error: 'Endpoint not found' }, { disableCors: true})
         }
     } catch (error) {
         console.error('Error:', error);
-        return {
-            statusCode: error.statusCode || 500,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+
+        return buildResponse(
+            error.statusCode || 500,
+            {
                 error: error.message || 'Internal server error',
                 ...(error.details && { details: error.details })
-            })
-        };
+            },
+            { disableCors: true },
+        );
     }
 };
 
@@ -148,43 +145,17 @@ async function handleCallback(event) {
 </body>
 </html>`;
 
-    return {
-        statusCode: 200,
-        headers: {
-            'Content-Type': 'text/html',
-            'Cache-Control': 'no-cache, no-store, must-revalidate'
-        },
-        body: htmlForm
-    };
+    return buildHtmlResponse(htmlForm);
 }
 
 async function handleQna(event) {
     // Handle preflight OPTIONS request
     if (event.httpMethod === 'OPTIONS') {
-        return {
-            statusCode: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-            },
-            body: ''
-        };
+        return buildResponse(200, { message: 'Success' });
     }
 
     if (!event.body) {
-        return {
-            statusCode: 400,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-            },
-            body: JSON.stringify({
-                message: 'Missing request body'
-            })
-        };
+        return buildResponse(400, { message: 'Missing request body' });
     }
 
     const { tempToken, answers } = JSON.parse(event.body);
@@ -222,53 +193,26 @@ async function handleQna(event) {
                 ExpressionAttributeValues: { ':true': true }
             }).promise();
 
-            return {
-                statusCode: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*', // or specify frontend domain
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-                },
-                body: JSON.stringify({
+            return buildResponse(200, {
                     tempToken,
                     nextStep: 'cipher',
                     message: 'Q&A answers stored successfully. Step 2 complete. Please proceed to cipher verification.',
                     isFirstTimeSetup: true
-                })
-            };
+                });
         } catch (error) {
-            return {
-                statusCode: error.statusCode || 500,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-                },
-                body: JSON.stringify({
-                    error: error.message || 'Internal server error',
-                    ...(error.details && { details: error.details })
-                })
-            };
+            return buildResponse(error.statusCode || 500, {
+                error: error.message || 'Internal server error',
+                ...(error.details && { details: error.details }),
+            });
         }
     } else {
         // Existing user - verify Q&A answers
         const isQnaValid = await verifyQnaAnswers(session.userId, answers);
         if (!isQnaValid) {
-            return {
-                statusCode: error.statusCode || 500,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-                },
-                body: JSON.stringify({
-                    error: error.message || 'Internal server error',
-                    ...(error.details && { details: error.details })
-                })
-            };
+            return buildResponse(error.statusCode || 500, {
+                error: error.message || 'Internal server error',
+                ...(error.details && { details: error.details })
+            });
         }
 
         const randomWord = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
@@ -289,22 +233,13 @@ async function handleQna(event) {
         }).promise();
 
         // Return the challenge with the response
-        return {
-            statusCode: 200,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-            },
-            body: JSON.stringify({
-                tempToken,
-                nextStep: 'cipher',
-                cipherChallenge,
-                message: 'Step 2 complete. Please solve the cipher challenge.',
-                isFirstTimeSetup: !existingAnswers // keep your existing logic here
-            })
-        };
+        return buildResponse(200, {
+            tempToken,
+            nextStep: 'cipher',
+            cipherChallenge,
+            message: 'Step 2 complete. Please solve the cipher challenge.',
+            isFirstTimeSetup: !existingAnswers // keep your existing logic here
+        });
     }
 }
 
@@ -355,16 +290,16 @@ async function handleCipher(event) {
         Key: { tempToken }
     }).promise();
 
-    return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    return buildResponse(
+        200, 
+        {
             accessToken: session.cognitoTokens.access_token,
             idToken: session.cognitoTokens.id_token,
             refreshToken: session.cognitoTokens.refresh_token,
             message: 'Authentication complete!'
-        })
-    };
+        },
+        { disableCors: true },
+    );
 }
 
 
@@ -387,16 +322,16 @@ async function handleStatus(event) {
         };
     }
 
-    return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    return buildResponse(
+        200, 
+        {
             step1Complete: session.step1Complete,
             step2Complete: session.step2Complete,
             step3Complete: session.step3Complete,
             currentStep: getCurrentStep(session)
-        })
-    };
+        },
+        { disableCors: true },
+    );
 }
 
 // =====================
@@ -571,4 +506,3 @@ async function storeQnaAnswers(userId, answers) {
         }
     }).promise();
 }
-
