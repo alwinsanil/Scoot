@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Loader2, ArrowRight, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
+import redirectBaseUri from '../../contants/redirectBaseUri';
 
 const qnaQuestions = [
     {
@@ -29,7 +30,6 @@ function QnA() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const redirectBaseUri = 'https://tupiqo0472.execute-api.us-east-1.amazonaws.com';
   const allQuestionsAnswered = qnaQuestions.every(q => qnaAnswers[q.id]?.trim());
 
   const urlParams = new URLSearchParams(window.location.search);

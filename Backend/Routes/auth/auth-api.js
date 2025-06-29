@@ -231,6 +231,7 @@ async function handleQna(event) {
             tempToken,
             nextStep: 'cipher',
             cipherChallenge,
+            cipherShift: randomShift,
             message: 'Step 2 complete. Please solve the cipher challenge.',
             isFirstTimeSetup: !existingAnswers // keep your existing logic here
         });
