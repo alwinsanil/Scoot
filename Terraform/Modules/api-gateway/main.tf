@@ -55,7 +55,9 @@ resource "aws_api_gateway_integration" "guest_integration" {
 }
 
 
-//auth
+# ======================
+# AUTH ROUTES
+# ======================
 resource "aws_api_gateway_resource" "auth" {
   rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
   parent_id   = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
@@ -175,7 +177,8 @@ resource "aws_api_gateway_integration_response" "options_integration_response" {
 
 
 # ======================
-# auth OPTIONS
+# AUTH OPTIONS
+# ======================
 resource "aws_api_gateway_method" "auth_options" {
   rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
   resource_id   = aws_api_gateway_resource.auth_proxy.id
@@ -251,7 +254,9 @@ resource "aws_api_gateway_deployment" "deployment" {
   lifecycle { create_before_destroy = true }
 }
 
+# ======================
 # Lambda permissions
+# ======================
 resource "aws_lambda_permission" "api_gw_user" {
   statement_id  = "AllowExecutionFromAPIGatewayUser"
   action        = "lambda:InvokeFunction"
