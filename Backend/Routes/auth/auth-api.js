@@ -37,7 +37,7 @@ exports.handler = async (event) => {
                 return await handleStatus(event);
 
             default:
-                return buildResponse(404, { error: 'Endpoint not found' }, { disableCors: true})
+                return buildResponse(404, { error: 'Endpoint not found' })
         }
     } catch (error) {
         console.error('Error:', error);
@@ -48,7 +48,6 @@ exports.handler = async (event) => {
                 error: error.message || 'Internal server error',
                 ...(error.details && { details: error.details })
             },
-            { disableCors: true },
         );
     }
 };
@@ -62,11 +61,10 @@ async function handleCallback(event) {
     const { code } = event.queryStringParameters || {};
     console.log(event.queryStringParameters)
     if (!code) {
-        throw {
-            statusCode: 400,
+        return buildResponse(400, {
             message: 'Missing code or state parameters',
-            details: { required: ['code', 'state'] }
-        };
+            details: { required: ['code', 'state'] },
+        });
     }
 
     // Exchange code for Cognito tokens
@@ -161,20 +159,16 @@ async function handleQna(event) {
     const { tempToken, answers } = JSON.parse(event.body);
 
     if (!tempToken || !answers) {
-        throw {
-            statusCode: 400,
-            message: 'Missing tempToken or answers',
-            details: { required: ['tempToken', 'answers'] }
-        };
+        return buildResponse(400, { 
+            message: 'Missing tempToken or answers', 
+            details: { required: ['tempToken', 'answers'] },
+        });
     }
 
     // Retrieve session
     const session = await getSession(tempToken);
     if (!session || !session.step1Complete) {
-        throw {
-            statusCode: 401,
-            message: 'Invalid session or step 1 not complete'
-        };
+        return buildResponse(401, { message: 'Invalid session or step 1 not complete' });
     }
 
     // Check if user has existing Q&A answers
@@ -245,29 +239,22 @@ async function handleQna(event) {
 
 async function handleCipher(event) {
     if (!event.body) {
-        throw {
-            statusCode: 400,
-            message: 'Missing request body'
-        };
+        return buildResponse(400, { message: 'Missing request body' });
     }
 
     const { tempToken, cipherResponse } = JSON.parse(event.body);
 
     if (!tempToken || !cipherResponse) {
-        throw {
-            statusCode: 400,
+        return buildResponse(400, {
             message: 'Missing tempToken or cipherResponse',
-            details: { required: ['tempToken', 'cipherResponse'] }
-        };
+            details: { required: ['tempToken', 'cipherResponse'] },
+        });
     }
 
     // Retrieve session
     const session = await getSession(tempToken);
     if (!session || !session.step1Complete || !session.step2Complete) {
-        throw {
-            statusCode: 401,
-            message: 'Invalid session or previous steps not complete'
-        };
+        return buildResponse(401, { message: 'Invalid session or previous steps not complete' });
     }
 
     // Verify cipher by passing original word and shift stored in session
@@ -278,10 +265,7 @@ async function handleCipher(event) {
 
     const isCipherValid = verifyCipherLogic(cipherResponse, cipherData);
     if (!isCipherValid) {
-        throw {
-            statusCode: 403,
-            message: 'Cipher verification failed'
-        };
+        return buildResponse(403, { message: 'Cipher verification failed' });
     }
 
     // All steps complete - delete session and return tokens
@@ -298,7 +282,6 @@ async function handleCipher(event) {
             refreshToken: session.cognitoTokens.refresh_token,
             message: 'Authentication complete!'
         },
-        { disableCors: true },
     );
 }
 
@@ -307,19 +290,15 @@ async function handleStatus(event) {
     const { tempToken } = event.queryStringParameters || {};
 
     if (!tempToken) {
-        throw {
-            statusCode: 400,
+        return buildResponse(400, {
             message: 'Missing tempToken parameter',
-            details: { required: ['tempToken'] }
-        };
+            details: { required: ['tempToken'] },
+        });
     }
 
     const session = await getSession(tempToken);
     if (!session) {
-        throw {
-            statusCode: 404,
-            message: 'Session not found'
-        };
+        return buildResponse(404, { message: 'Session not found' });
     }
 
     return buildResponse(
@@ -329,8 +308,7 @@ async function handleStatus(event) {
             step2Complete: session.step2Complete,
             step3Complete: session.step3Complete,
             currentStep: getCurrentStep(session)
-        },
-        { disableCors: true },
+        }
     );
 }
 
@@ -438,10 +416,7 @@ async function verifyQnaAnswers(userId, answers) {
     }).promise();
 
     if (!userQna.Item) {
-        throw {
-            statusCode: 404,
-            message: 'User Q&A data not found'
-        };
+        return buildResponse(404, { message: 'User Q&A data not found' });
     }
 
     return answers.every((answer, index) =>
@@ -456,10 +431,7 @@ async function verifyCipherResponse(userId, cipherResponse) {
     }).promise();
 
     if (!userCipher.Item) {
-        throw {
-            statusCode: 404,
-            message: 'User cipher data not found'
-        };
+        return buildResponse(404, { message: 'User cipher data not found' });
     }
 
     return verifyCipherLogic(cipherResponse, userCipher.Item.cipherKey);
