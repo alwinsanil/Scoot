@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lock, Loader2, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { Lock, Loader2, ArrowRight, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
 
 const qnaQuestions = [
     {
@@ -30,8 +30,11 @@ function QnA() {
   const [error, setError] = useState('');
 
   const redirectBaseUri = 'https://tupiqo0472.execute-api.us-east-1.amazonaws.com';
-  const authData = location.state?.authData;
   const allQuestionsAnswered = qnaQuestions.every(q => qnaAnswers[q.id]?.trim());
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const encodedData = urlParams.get('data');
+  const authData = JSON.parse(atob(encodedData));
 
   const handleQnaSubmit = async () => {
     setIsLoading(true);
@@ -52,7 +55,7 @@ function QnA() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tempToken: authData?.tempToken,
+          tempToken: authData.tempToken,
           answers: answersArray
         }),
       });

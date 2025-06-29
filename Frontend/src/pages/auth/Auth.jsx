@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, Lock, User, UserPlus } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
 
 function Auth() {
-  const navigate = useNavigate();
-  const location = useLocation();
-
   const [error, setError] = useState('');
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
 
@@ -21,29 +17,10 @@ function Auth() {
   // Check for auth data from POST redirect handler
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const encodedData = urlParams.get('data');
     const error = urlParams.get('error');
 
-    if (encodedData) {
-      try {
-        const authResponse = JSON.parse(atob(encodedData));
-
-        if (authResponse.nextStep === 'qna') {
-          const searchParams = location.search;
-
-          navigate(`/auth/qna/callback${searchParams}`, {
-            replace: true,
-            state: { authData: authResponse, isFirstTimeSetUp: authResponse.isFirstTimeSetUp || false }
-          })
-        }
-      } catch (err) {
-        setError('Failed to process authentication data.');
-        console.error('Data decode error:', err);
-      }
-    } else if (error) {
-      setError('Authentication failed: ' + error.replace('_', ' '));
-    }
-  }, [location.search, navigate]);
+    if (error) setError('Authentication failed: ' + error.replace('_', ' '));
+  }, []);
 
   const handleCognitoLogin = () => {
     const authUrl = `${cognitoConfig.authUrl}?response_type=code&client_id=${cognitoConfig.clientId}&redirect_uri=${encodeURIComponent(cognitoConfig.redirectUri)}&scope=${encodeURIComponent(cognitoConfig.scope)}`;
