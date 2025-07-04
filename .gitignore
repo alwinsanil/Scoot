@@ -4,3 +4,4 @@ Terraform/.terraform.lock.hcl
 Terraform/.terraform/*
 
 Frontend/node_modules
+Backend/Routes/auth/node_modules

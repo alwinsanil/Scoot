@@ -94,9 +94,9 @@ resource "aws_cognito_user_pool_client" "client" {
   generate_secret = true
   
   # OAuth settings
-  callback_urls = ["http://localhost:3000/callback"]
-  logout_urls   = ["http://localhost:3000"]
-  default_redirect_uri = "http://localhost:3000/callback"
+  callback_urls = ["https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
+  logout_urls   = ["https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/logout"]
+  default_redirect_uri = "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
   
   allowed_oauth_flows = ["code"]
   allowed_oauth_scopes = ["email", "openid", "profile"]
@@ -141,8 +141,13 @@ resource "aws_cognito_user_pool_client" "client" {
   prevent_user_existence_errors = "ENABLED"
 }
 
+resource "random_integer" "domain_suffix" {
+  min = 10000
+  max = 99999
+}
+
 # User Pool Domain
 resource "aws_cognito_user_pool_domain" "domain" {
-  domain       = "dalscooter-auth"
+  domain       = "dalscooter-auth-${random_integer.domain_suffix.result}"
   user_pool_id = aws_cognito_user_pool.dalscooter.id
 }

@@ -7,7 +7,7 @@ output "client_id" {
 }
 
 output "login_url" {
-  value = "https://${aws_cognito_user_pool_domain.domain.domain}.auth.us-east-1.amazoncognito.com/login?client_id=${aws_cognito_user_pool_client.client.id}&response_type=code&scope=email+openid+profile&redirect_uri=http://localhost:3000/callback"
+  value = "https://${aws_cognito_user_pool_domain.domain.domain}.auth.us-east-1.amazoncognito.com/login?client_id=${aws_cognito_user_pool_client.client.id}&response_type=code&scope=email+openid+profile&redirect_uri=${var.api_url}/auth/callback"
 }
 
 output "cognito_user_pool_arn" {
