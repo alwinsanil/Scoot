@@ -6,12 +6,16 @@ function Auth() {
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [isLoading, setIsLoading] = useState(false);
 
+  // Dummy check for authentication
+  const isAuthenticated = !!sessionStorage.getItem("cognitoToken");
+
   // AWS Cognito Configuration
   const cognitoConfig = {
     clientId: '1hki99totvkb99vddorjkhh7bg',
     redirectUri: "https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback",
     authUrl: 'https://dalscooter-auth-13288.auth.us-east-1.amazoncognito.com/oauth2/authorize',
     signupUrl: 'https://dalscooter-auth-13288.auth.us-east-1.amazoncognito.com/signup',
+    logoutUrl: 'https://dalscooter-auth-13288.auth.us-east-1.amazoncognito.com/logout',
     scope: 'email openid profile'
   };
 
@@ -33,6 +37,16 @@ function Auth() {
     setIsLoading(true);
     const signupUrl = `${cognitoConfig.signupUrl}?response_type=code&client_id=${cognitoConfig.clientId}&redirect_uri=${encodeURIComponent(cognitoConfig.redirectUri)}&scope=${encodeURIComponent(cognitoConfig.scope)}`;
     window.location.href = signupUrl;
+  };
+
+  const handleSignout = () => {
+    // Clear any stored tokens/session data
+    sessionStorage.clear();
+    localStorage.clear();
+
+    // Redirect to Cognito logout
+    const logoutUrl = `${cognitoConfig.logoutUrl}?client_id=${cognitoConfig.clientId}&logout_uri=${encodeURIComponent(window.location.origin)}`;
+    window.location.href = logoutUrl;
   };
 
   return (
@@ -127,7 +141,7 @@ function Auth() {
                 {isLoading ? 'Signing In...' : 'Sign In'}
               </button>
             )}
-            
+
             {/* Security Features */}
             <div className="bg-gray-50/60 rounded-xl p-4 border border-gray-200/50">
               <div className="flex items-center justify-center gap-6 text-gray-600">
@@ -154,11 +168,23 @@ function Auth() {
                 </span>
               </p>
             </div>
+
+            {/* Sign Out Button */}
+            {isAuthenticated && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={handleSignout}
+                  className="text-sm font-semibold text-red-500 hover:underline"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
-};
+}
 
 export default Auth;

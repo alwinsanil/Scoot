@@ -35,6 +35,18 @@ variable "lambda_user_invoke_arn" {
   
 }
 
+variable "lambda_owner_invoke_arn" {
+  description = "ARN to invoke the owner API Lambda function"
+  type        = string      
+  
+}
+
+variable "lambda_function_owner_name" {
+  description = "Name of the owner API Lambda function"
+  type        = string    
+  
+}
+
 variable "lambda_user_function_name" {
   description = "Name of the user API Lambda function"
   type        = string    

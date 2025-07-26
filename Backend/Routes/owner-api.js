@@ -29,7 +29,18 @@ exports.lambdaHandler = async (event) => {
 
     let responseBody;
 
-    responseBody = handleUserRequest(pathParts, httpMethod, queryParams, bodyJson, headers, userInfo);
+    // Owner-only endpoints
+    if (!userInfo.isOwner) {
+        return {
+            statusCode: 403,
+            headers: getCorsHeaders(),
+            body: JSON.stringify({
+                error: 'Forbidden',
+                message: 'Owner access required'
+            })
+        };
+    }
+    responseBody = handleOwnerRequest(pathParts, httpMethod, queryParams, bodyJson, headers, userInfo);
 
     return {
         statusCode: 200,
@@ -57,11 +68,20 @@ function extractUserInfo(headers) {
         const email = payload.email;
         const groups = payload['cognito:groups'] || [];
         
+        // Determine user role
+        const isOwner = groups.includes('owners') || groups.includes('admins');
+        const isAdmin = groups.includes('admins');
+        const isUser = groups.includes('users') || groups.length === 0; // Default to user if no groups
+        
         return {
             isAuthenticated: true,
             userId: userId,
             email: email,
-            groups: groups
+            groups: groups,
+            isOwner: isOwner,
+            isAdmin: isAdmin,
+            isUser: isUser,
+            role: isAdmin ? 'admin' : (isOwner ? 'owner' : 'user')
         };
     } catch (error) {
         console.error('Error extracting user info:', error);
@@ -71,68 +91,68 @@ function extractUserInfo(headers) {
 
 
 
-function handleUserRequest(pathParts, method, queryParams, body, headers, userInfo) {
+function handleOwnerRequest(pathParts, method, queryParams, body, headers, userInfo) {
     const endpoint = pathParts.length > 2 ? pathParts[2] : null;
 
-    const scooterActions = {
-        GET: 'Get available scooters',
-        POST: 'Reserve scooter',
-        PUT: 'Update scooter reservation',
-        DELETE: 'Cancel reservation'
+    const ownerScooterActions = {
+        GET: 'Get owned scooters',
+        POST: 'Add new scooter',
+        PUT: 'Update scooter details',
+        DELETE: 'Remove scooter'
     };
 
-    const rideActions = {
-        GET: 'Get ride history',
-        POST: 'Start new ride',
-        PUT: 'Update ride status',
-        DELETE: 'Cancel ride'
+    const ownerAnalyticsActions = {
+        GET: 'Get earnings and usage analytics',
+        POST: 'Generate reports',
+        PUT: 'Update analytics settings',
+        DELETE: 'Delete old reports'
     };
 
-    const profileActions = {
-        GET: 'Get profile',
-        POST: 'Create profile',
-        PUT: 'Update profile',
-        DELETE: 'Delete profile'
+    const ownerBookingActions = {
+        GET: 'View all bookings for owned scooters',
+        POST: 'Create manual booking',
+        PUT: 'Update booking status',
+        DELETE: 'Cancel booking'
     };
 
     if (endpoint === 'scooters') {
         return {
-            endpoint: 'user/scooters',
+            endpoint: 'owner/scooters',
             method: method,
-            message: 'User scooter management',
+            message: 'Owner scooter management',
             userId: userInfo.userId,
-            userRole: 'user',
-            action: scooterActions[method] || 'Unknown action',
-            permissions: 'User can view and reserve scooters'
+            userRole: userInfo.role,
+            action: ownerScooterActions[method] || 'Unknown action',
+            permissions: 'Owner can manage their scooter fleet'
         };
-    } else if (endpoint === 'rides') {
+    } else if (endpoint === 'analytics') {
         return {
-            endpoint: 'user/rides',
+            endpoint: 'owner/analytics',
             method: method,
-            message: 'User ride management',
+            message: 'Owner analytics and reports',
             userId: userInfo.userId,
-            userRole: 'user',
-            action: rideActions[method] || 'Unknown action',
-            permissions: 'User can manage their own rides'
+            userRole: userInfo.role,
+            action: ownerAnalyticsActions[method] || 'Unknown action',
+            permissions: 'Owner can view earnings and usage data'
         };
-    } else if (endpoint === 'profile') {
+    } else if (endpoint === 'bookings') {
         return {
-            endpoint: 'user/profile',
+            endpoint: 'owner/bookings',
             method: method,
-            message: 'User profile management',
+            message: 'Owner booking management',
             userId: userInfo.userId,
-            userRole: 'user',
-            action: profileActions[method] || 'Unknown action',
-            permissions: 'User can manage their own profile'
+            userRole: userInfo.role,
+            action: ownerBookingActions[method] || 'Unknown action',
+            permissions: 'Owner can manage bookings for their scooters'
         };
     } else {
         return {
-            endpoint: 'user',
+            endpoint: 'owner',
             method: method,
-            message: 'Unknown user endpoint',
+            message: 'Unknown owner endpoint',
             userId: userInfo.userId,
-            userRole: 'user',
-            availableUserEndpoints: ['scooters', 'rides', 'profile']
+            userRole: userInfo.role,
+            availableOwnerEndpoints: ['scooters', 'analytics', 'bookings']
         };
     }
 }

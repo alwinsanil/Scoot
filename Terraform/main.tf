@@ -34,7 +34,9 @@ module "lambda" {
 
   project_name    = var.project_name
   environment     = var.environment
+  aws_region      = var.aws_region
   lambda_role_arn = data.aws_iam_role.lab_role.arn
+  cognito_user_pool_id = module.cognito.user_pool_id
 }
 
 # API Gateway module
@@ -48,6 +50,8 @@ module "api_gateway" {
   lambda_guest_function_name = module.lambda.lambda_function_guest_name
   lambda_auth_invoke_arn      = module.lambda.lambda_auth_invoke_arn
   lambda_function_auth_name   = module.lambda.lambda_function_auth_name
+  lambda_owner_invoke_arn     = module.lambda.lambda_owner_invoke_arn
+  lambda_function_owner_name  = module.lambda.lambda_function_owner_name
   cognito_user_pool_arn  = module.cognito.cognito_user_pool_arn
 }
 
