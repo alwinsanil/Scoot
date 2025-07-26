@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Loader2, ArrowRight, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
-import redirectBaseUri from '../../contants/redirectBaseUri';
+import {redirectBaseUri} from '../../contants/constants';
 
 const qnaQuestions = [
     {

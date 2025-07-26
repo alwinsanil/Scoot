@@ -37,6 +37,10 @@ module "lambda" {
   aws_region      = var.aws_region
   lambda_role_arn = data.aws_iam_role.lab_role.arn
   cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id     = module.cognito.client_id
+  cognito_client_secret = module.cognito.user_pool_client_secret
+  cognito_domain        = module.cognito.user_pool_domain
+  api_url              = module.api_gateway.api_url
 }
 
 # API Gateway module

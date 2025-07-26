@@ -1,6 +1,7 @@
 
 
 # AWS Cognito User Pool
+// cognito/main.tf
 resource "aws_cognito_user_pool" "dalscooter" {
   name = var.cognito_user_pool_name
 
@@ -97,9 +98,9 @@ resource "aws_cognito_user_pool_client" "client" {
   generate_secret = true
   
   # OAuth settings
-  callback_urls = ["https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
-  logout_urls   = ["https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/logout"]
-  default_redirect_uri = "https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+  callback_urls = ["https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
+  logout_urls   = ["https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/logout"]
+  default_redirect_uri = "https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
   
   allowed_oauth_flows = ["code"]
   allowed_oauth_scopes = ["email", "openid", "profile"]

@@ -18,10 +18,10 @@ resource "aws_lambda_function" "auth_api" {
       PROJECT_NAME          = var.project_name
       ENVIRONMENT           = var.environment
       LOG_LEVEL             = "INFO"
-      COGNITO_CLIENT_ID     = "1hki99totvkb99vddorjkhh7bg"
-      COGNITO_CLIENT_SECRET = "f9oopnjin2shh3t96lgpoerr8ds4e76omv62gnqcq83niu6nnrv"
-      COGNITO_DOMAIN        = "dalscooter-auth-13288.auth.us-east-1.amazoncognito.com"
-      REDIRECT_URI          = "https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+      COGNITO_CLIENT_ID     = var.cognito_client_id
+      COGNITO_CLIENT_SECRET = var.cognito_client_secret
+      COGNITO_DOMAIN        = "${var.cognito_domain}.auth.${var.aws_region}.amazoncognito.com"
+      REDIRECT_URI          = "${var.api_url}/auth/callback"
     }
   }
 
@@ -109,11 +109,11 @@ resource "aws_lambda_function" "user_api" {
 
   environment {
     variables = {
-      PROJECT_NAME = var.project_name
-      ENVIRONMENT  = var.environment
-      LOG_LEVEL    = "INFO"
+      PROJECT_NAME         = var.project_name
+      ENVIRONMENT          = var.environment
+      LOG_LEVEL            = "INFO"
       COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-      REGION           = var.aws_region
+      REGION               = var.aws_region
     }
   }
 
@@ -156,11 +156,11 @@ resource "aws_lambda_function" "owner_api" {
 
   environment {
     variables = {
-      PROJECT_NAME = var.project_name
-      ENVIRONMENT  = var.environment
-      LOG_LEVEL    = "INFO"
+      PROJECT_NAME         = var.project_name
+      ENVIRONMENT          = var.environment
+      LOG_LEVEL            = "INFO"
       COGNITO_USER_POOL_ID = var.cognito_user_pool_id
-      REGION           = var.aws_region
+      REGION               = var.aws_region
     }
   }
 

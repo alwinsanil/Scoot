@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, Lock, User, UserPlus, Shield, Zap, Sparkles } from 'lucide-react';
-
+import { cognitoConfig } from '../../contants/constants';
 function Auth() {
   const [error, setError] = useState('');
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
@@ -10,14 +10,7 @@ function Auth() {
   const isAuthenticated = !!sessionStorage.getItem("cognitoToken");
 
   // AWS Cognito Configuration
-  const cognitoConfig = {
-    clientId: '1hki99totvkb99vddorjkhh7bg',
-    redirectUri: "https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback",
-    authUrl: 'https://dalscooter-auth-13288.auth.us-east-1.amazoncognito.com/oauth2/authorize',
-    signupUrl: 'https://dalscooter-auth-13288.auth.us-east-1.amazoncognito.com/signup',
-    logoutUrl: 'https://dalscooter-auth-13288.auth.us-east-1.amazoncognito.com/logout',
-    scope: 'email openid profile'
-  };
+  
 
   // Check for auth data from POST redirect handler
   useEffect(() => {
