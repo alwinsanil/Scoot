@@ -131,20 +131,10 @@ resource "aws_cloudwatch_log_group" "user_lambda_logs" {
 }
 
 # owner-api
-# Create deployment package
-data "archive_file" "owner_lambda_zip" {
-  type        = "zip"
-  output_path = "${path.module}/owner-api.zip"
-
-  source {
-    content  = file("${path.module}../../../../Backend/Routes/owner-api.js")
-    filename = "owner-api.js"
-  }
-}
 
 # Lambda function
 resource "aws_lambda_function" "owner_api" {
-  filename      = data.archive_file.owner_lambda_zip.output_path
+  filename      = "${path.module}/owner-api.zip"
   function_name = "${var.project_name}-${var.environment}-owner-api"
   role          = var.lambda_role_arn
   handler       = "owner-api.lambdaHandler"
@@ -152,7 +142,7 @@ resource "aws_lambda_function" "owner_api" {
   timeout       = 30
   memory_size   = 128
 
-  source_code_hash = data.archive_file.owner_lambda_zip.output_base64sha256
+  source_code_hash = filebase64sha256("${path.module}/owner-api.zip")
 
   environment {
     variables = {

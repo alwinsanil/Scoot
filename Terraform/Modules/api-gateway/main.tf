@@ -54,6 +54,50 @@ resource "aws_api_gateway_integration" "guest_integration" {
   uri                     = var.lambda_guest_invoke_arn
 }
 
+# GUEST OPTIONS (CORS)
+resource "aws_api_gateway_method" "guest_options" {
+  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id   = aws_api_gateway_resource.guest_proxy.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "guest_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.guest_proxy.id
+  http_method = aws_api_gateway_method.guest_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = jsonencode({ statusCode = 200 })
+  }
+}
+
+resource "aws_api_gateway_method_response" "guest_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.guest_proxy.id
+  http_method = aws_api_gateway_method.guest_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "guest_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.guest_proxy.id
+  http_method = aws_api_gateway_method.guest_options.http_method
+  status_code = aws_api_gateway_method_response.guest_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS,PUT,DELETE'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
 
 # ======================
 # AUTH ROUTES
@@ -77,8 +121,8 @@ resource "aws_api_gateway_method" "auth_any" {
   authorization = "NONE"
 
   request_parameters = {
-  "method.request.querystring.code"  = false
-  "method.request.querystring.state" = false
+    "method.request.querystring.code"  = false
+    "method.request.querystring.state" = false
   }
 }
 
@@ -93,6 +137,51 @@ resource "aws_api_gateway_integration" "auth_integration" {
   request_parameters = {
     "integration.request.querystring.code"  = "method.request.querystring.code"
     "integration.request.querystring.state" = "method.request.querystring.state"
+  }
+}
+
+# AUTH OPTIONS (CORS)
+resource "aws_api_gateway_method" "auth_options" {
+  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id   = aws_api_gateway_resource.auth_proxy.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "auth_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.auth_proxy.id
+  http_method = aws_api_gateway_method.auth_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = jsonencode({ statusCode = 200 })
+  }
+}
+
+resource "aws_api_gateway_method_response" "auth_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.auth_proxy.id
+  http_method = aws_api_gateway_method.auth_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "auth_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.auth_proxy.id
+  http_method = aws_api_gateway_method.auth_options.http_method
+  status_code = aws_api_gateway_method_response.auth_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS,PUT,DELETE'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
   }
 }
 
@@ -128,6 +217,51 @@ resource "aws_api_gateway_integration" "user_integration" {
   uri                     = var.lambda_user_invoke_arn
 }
 
+# USER OPTIONS (CORS)
+resource "aws_api_gateway_method" "user_options" {
+  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id   = aws_api_gateway_resource.user_proxy.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "user_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.user_proxy.id
+  http_method = aws_api_gateway_method.user_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = jsonencode({ statusCode = 200 })
+  }
+}
+
+resource "aws_api_gateway_method_response" "user_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.user_proxy.id
+  http_method = aws_api_gateway_method.user_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "user_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.user_proxy.id
+  http_method = aws_api_gateway_method.user_options.http_method
+  status_code = aws_api_gateway_method_response.user_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS,PUT,DELETE'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
 # ======================
 # PROTECTED OWNER ROUTES
 # ======================
@@ -160,8 +294,53 @@ resource "aws_api_gateway_integration" "owner_integration" {
   uri                     = var.lambda_owner_invoke_arn
 }
 
+# OWNER OPTIONS (CORS)
+resource "aws_api_gateway_method" "owner_options" {
+  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id   = aws_api_gateway_resource.owner_proxy.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "owner_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.owner_proxy.id
+  http_method = aws_api_gateway_method.owner_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = jsonencode({ statusCode = 200 })
+  }
+}
+
+resource "aws_api_gateway_method_response" "owner_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.owner_proxy.id
+  http_method = aws_api_gateway_method.owner_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "owner_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  resource_id = aws_api_gateway_resource.owner_proxy.id
+  http_method = aws_api_gateway_method.owner_options.http_method
+  status_code = aws_api_gateway_method_response.owner_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS,PUT,DELETE'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
 # ======================
-# CORS CONFIGURATION
+# ROOT CORS CONFIGURATION
 # ======================
 resource "aws_api_gateway_method" "options_method" {
   rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
@@ -207,55 +386,6 @@ resource "aws_api_gateway_integration_response" "options_integration_response" {
   }
 }
 
-
-# ======================
-# AUTH OPTIONS
-# ======================
-resource "aws_api_gateway_method" "auth_options" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id   = aws_api_gateway_resource.auth_proxy.id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "auth_options_integration" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id = aws_api_gateway_resource.auth_proxy.id
-  http_method = aws_api_gateway_method.auth_options.http_method
-  type        = "MOCK"
-
-  request_templates = {
-    "application/json" = jsonencode({ statusCode = 200 })
-  }
-}
-
-resource "aws_api_gateway_method_response" "auth_options_200" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id = aws_api_gateway_resource.auth_proxy.id
-  http_method = aws_api_gateway_method.auth_options.http_method
-  status_code = "200"
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = true
-    "method.response.header.Access-Control-Allow-Methods" = true
-    "method.response.header.Access-Control-Allow-Origin"  = true
-  }
-}
-
-resource "aws_api_gateway_integration_response" "auth_options_response" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id = aws_api_gateway_resource.auth_proxy.id
-  http_method = aws_api_gateway_method.auth_options.http_method
-  status_code = aws_api_gateway_method_response.auth_options_200.status_code
-
-  response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS,PUT,DELETE'"
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
-  }
-}
-
-
 # ======================
 # DEPLOYMENT
 # ======================
@@ -265,7 +395,11 @@ resource "aws_api_gateway_deployment" "deployment" {
     aws_api_gateway_integration.user_integration,
     aws_api_gateway_integration.owner_integration,
     aws_api_gateway_integration.auth_integration,
-    aws_api_gateway_integration.options_integration
+    aws_api_gateway_integration.options_integration,
+    aws_api_gateway_integration.guest_options_integration,
+    aws_api_gateway_integration.user_options_integration,
+    aws_api_gateway_integration.owner_options_integration,
+    aws_api_gateway_integration.auth_options_integration
   ]
 
   rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
@@ -281,7 +415,13 @@ resource "aws_api_gateway_deployment" "deployment" {
       aws_api_gateway_method.user_any.id,
       aws_api_gateway_method.owner_any.id,
       aws_api_gateway_method.auth_any.id,
-      aws_api_gateway_method.auth_options.id,                       
+      aws_api_gateway_method.guest_options.id,
+      aws_api_gateway_method.user_options.id,
+      aws_api_gateway_method.owner_options.id,
+      aws_api_gateway_method.auth_options.id,
+      aws_api_gateway_integration.guest_options_integration.id,
+      aws_api_gateway_integration.user_options_integration.id,
+      aws_api_gateway_integration.owner_options_integration.id,
       aws_api_gateway_integration.auth_options_integration.id
     ]))
   }
@@ -322,5 +462,4 @@ resource "aws_lambda_permission" "api_gw_auth" {
   function_name = var.lambda_function_auth_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.dalscooter_api.execution_arn}/*/*"
-  
 }

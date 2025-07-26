@@ -174,25 +174,37 @@ async function handleQna(event) {
     // Check if user has existing Q&A answers
     const existingAnswers = await getUserQnaAnswers(session.userId);
 
+    // Generate cipher challenge for both first-time and returning users
+    const randomWord = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
+    const randomShift = Math.floor(Math.random() * 25) + 1; // shift between 1 and 25
+    const cipherChallenge = caesarShift(randomWord, randomShift);
+
     if (!existingAnswers) {
         // First time signup - store the Q&A answers
         try {
             await storeQnaAnswers(session.userId, answers);
 
-            // Update session to mark step 2 as complete
+            // Update session to mark step 2 as complete AND store cipher challenge
             await dynamoClient.update({
                 TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
                 Key: { tempToken },
-                UpdateExpression: 'SET step2Complete = :true',
-                ExpressionAttributeValues: { ':true': true }
+                UpdateExpression: 'SET step2Complete = :true, cipherOriginal = :word, cipherShift = :shift, cipherChallenge = :challenge',
+                ExpressionAttributeValues: {
+                    ':true': true,
+                    ':word': randomWord,
+                    ':shift': randomShift,
+                    ':challenge': cipherChallenge
+                }
             }).promise();
 
             return buildResponse(200, {
-                    tempToken,
-                    nextStep: 'cipher',
-                    message: 'Q&A answers stored successfully. Step 2 complete. Please proceed to cipher verification.',
-                    isFirstTimeSetup: true
-                });
+                tempToken,
+                nextStep: 'cipher',
+                cipherChallenge,
+                cipherShift: randomShift,
+                message: 'Q&A answers stored successfully. Step 2 complete. Please solve the cipher challenge.',
+                isFirstTimeSetup: true
+            });
         } catch (error) {
             return buildResponse(error.statusCode || 500, {
                 error: error.message || 'Internal server error',
@@ -203,15 +215,11 @@ async function handleQna(event) {
         // Existing user - verify Q&A answers
         const isQnaValid = await verifyQnaAnswers(session.userId, answers);
         if (!isQnaValid) {
-            return buildResponse(error.statusCode || 500, {
-                error: error.message || 'Internal server error',
-                ...(error.details && { details: error.details })
+            return buildResponse(403, {
+                error: 'Q&A verification failed',
+                message: 'One or more security question answers are incorrect'
             });
         }
-
-        const randomWord = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
-        const randomShift = Math.floor(Math.random() * 25) + 1; // shift between 1 and 25
-        const cipherChallenge = caesarShift(randomWord, randomShift);
 
         // Store cipher challenge and answer shift in DynamoDB (or update session)
         await dynamoClient.update({
@@ -233,7 +241,7 @@ async function handleQna(event) {
             cipherChallenge,
             cipherShift: randomShift,
             message: 'Step 2 complete. Please solve the cipher challenge.',
-            isFirstTimeSetup: !existingAnswers // keep your existing logic here
+            isFirstTimeSetup: false
         });
     }
 }
@@ -336,11 +344,12 @@ function caesarUnshift(word, shift) {
 function verifyCipherLogic(userResponse, cipherData) {
     const { cipherOriginal, cipherShift } = cipherData;
 
-    // Decode user's response by shifting backward
-    const decodedResponse = caesarUnshift(userResponse.toLowerCase().trim(), cipherShift);
+    // The user should have decoded the challenge and provided the original word
+    // So we just need to compare their response directly with the original
+    const normalizedUserResponse = userResponse.toLowerCase().trim();
+    const normalizedOriginal = cipherOriginal.toLowerCase().trim();
 
-    // Compare with original word
-    return decodedResponse === cipherOriginal;
+    return normalizedUserResponse === normalizedOriginal;
 }
 
 
@@ -417,7 +426,7 @@ async function verifyQnaAnswers(userId, answers) {
     }).promise();
 
     if (!userQna.Item) {
-        return buildResponse(404, { message: 'User Q&A data not found' });
+        return false;
     }
 
     return answers.every((answer, index) =>
@@ -440,12 +449,6 @@ async function verifyCipherResponse(userId, cipherResponse) {
 
 function hashAnswer(answer) {
     return crypto.createHash('sha256').update(answer.toLowerCase().trim()).digest('hex');
-}
-
-function verifyCipherLogic(response, key) {
-    // Implement your specific cipher verification
-    // Example: time-based OTP, RSA signature verification, etc.
-    return true; // Placeholder - replace with actual implementation
 }
 
 function getCurrentStep(session) {
