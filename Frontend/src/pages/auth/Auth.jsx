@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, Lock, User, UserPlus } from 'lucide-react';
-
+import { AlertCircle, Lock, User, UserPlus, Shield, Zap, Sparkles } from 'lucide-react';
+import { cognitoConfig } from '../../contants/constants';
 function Auth() {
   const [error, setError] = useState('');
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Dummy check for authentication
+  const isAuthenticated = !!sessionStorage.getItem("cognitoToken");
 
   // AWS Cognito Configuration
-  const cognitoConfig = {
-    clientId: '3tcb78k8ksrv41965lh8hfpqla',
-    redirectUri: "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback",
-    authUrl: 'https://dalscooter-auth-21645.auth.us-east-1.amazoncognito.com/oauth2/authorize',
-    signupUrl: 'https://dalscooter-auth-21645.auth.us-east-1.amazoncognito.com/signup',
-    scope: 'email openid profile'
-  };
+
 
   // Check for auth data from POST redirect handler
   useEffect(() => {
@@ -23,101 +21,161 @@ function Auth() {
   }, []);
 
   const handleCognitoLogin = () => {
+    setIsLoading(true);
     const authUrl = `${cognitoConfig.authUrl}?response_type=code&client_id=${cognitoConfig.clientId}&redirect_uri=${encodeURIComponent(cognitoConfig.redirectUri)}&scope=${encodeURIComponent(cognitoConfig.scope)}`;
     window.location.href = authUrl;
   };
 
   const handleCognitoSignup = () => {
+    setIsLoading(true);
     const signupUrl = `${cognitoConfig.signupUrl}?response_type=code&client_id=${cognitoConfig.clientId}&redirect_uri=${encodeURIComponent(cognitoConfig.redirectUri)}&scope=${encodeURIComponent(cognitoConfig.scope)}`;
     window.location.href = signupUrl;
   };
 
+  const handleSignout = () => {
+    // Clear any stored tokens/session data
+    sessionStorage.clear();
+    localStorage.clear();
+
+    // Redirect to Cognito logout
+    const logoutUrl = `${cognitoConfig.logoutUrl}?client_id=${cognitoConfig.clientId}&logout_uri=${encodeURIComponent(window.location.origin)}`;
+    window.location.href = logoutUrl;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            {authMode === 'signup' ? (
-              <UserPlus className="w-8 h-8 text-blue-600" />
-            ) : (
-              <Lock className="w-8 h-8 text-blue-600" />
-            )}
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {authMode === 'signup' ? 'Create Account' : 'Welcome Back'}
-          </h1>
-          <p className="text-gray-600">
-            {authMode === 'signup'
-              ? 'Create a new account using AWS Cognito'
-              : 'Sign in to your account using AWS Cognito'
-            }
-          </p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-purple-50">
+      {/* Decorative Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-20 w-32 h-32 bg-pink-200 rounded-full opacity-40"></div>
+        <div className="absolute top-40 right-32 w-24 h-24 bg-purple-200 rounded-full opacity-40"></div>
+        <div className="absolute bottom-32 left-40 w-28 h-28 bg-blue-200 rounded-full opacity-40"></div>
+        <div className="absolute bottom-20 right-20 w-20 h-20 bg-yellow-200 rounded-full opacity-40"></div>
+      </div>
 
-        {/* Auth Mode Toggle */}
-        <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => setAuthMode('login')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'login'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Sign In
-          </button>
-          <button
-            onClick={() => setAuthMode('signup')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'signup'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            Sign Up
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-            <span className="text-red-700 text-sm">{error}</span>
-          </div>
-        )}
-
-        <div className="space-y-6">
-          {authMode === 'signup' ? (
-            <button
-              onClick={handleCognitoSignup}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <UserPlus className="w-5 h-5" />
-              Create Account with AWS Cognito
-            </button>
-          ) : (
-            <button
-              onClick={handleCognitoLogin}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <User className="w-5 h-5" />
-              Sign in with AWS Cognito
-            </button>
-          )}
-          <div className="text-center">
-            <p className="text-sm text-gray-500">
-              Secure authentication powered by AWS Cognito
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl border border-pink-100 shadow-xl p-8 w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-gradient-to-r from-pink-200 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
+              {authMode === 'signup' ? (
+                <UserPlus className="w-10 h-10 text-purple-600" />
+              ) : (
+                <Lock className="w-10 h-10 text-purple-600" />
+              )}
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-3">
+              {authMode === 'signup' ? 'Create Account' : 'Welcome Back'}
+            </h1>
+            <p className="text-gray-600 text-lg">
+              {authMode === 'signup'
+                ? 'Join us and start your journey today'
+                : 'Sign in to continue where you left off'
+              }
             </p>
           </div>
-        </div>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <div className="text-xs text-gray-500 space-y-1">
-            <p><strong>Client ID:</strong> {cognitoConfig.clientId}</p>
-            <p><strong>API Gatzeway:</strong> {cognitoConfig.redirectUri}</p>
-            <p><strong>Mode:</strong> {authMode === 'signup' ? 'Sign Up' : 'Sign In'}</p>
+          {/* Auth Mode Toggle */}
+          <div className="flex mb-8 bg-gray-100/60 rounded-xl p-1 border border-gray-200/50">
+            <button
+              onClick={() => setAuthMode('login')}
+              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-colors ${authMode === 'login'
+                ? 'bg-white text-purple-600 shadow-sm border border-purple-100'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => setAuthMode('signup')}
+              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-colors ${authMode === 'signup'
+                ? 'bg-white text-pink-600 shadow-sm border border-pink-100'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <span className="text-red-700 text-sm font-medium">{error}</span>
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {authMode === 'signup' ? (
+              <button
+                onClick={handleCognitoSignup}
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-bold py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                ) : (
+                  <UserPlus className="w-5 h-5" />
+                )}
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+              </button>
+            ) : (
+              <button
+                onClick={handleCognitoLogin}
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-purple-400 to-indigo-400 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                ) : (
+                  <User className="w-5 h-5" />
+                )}
+                {isLoading ? 'Signing In...' : 'Sign In'}
+              </button>
+            )}
+
+            {/* Security Features */}
+            <div className="bg-gray-50/60 rounded-xl p-4 border border-gray-200/50">
+              <div className="flex items-center justify-center gap-6 text-gray-600">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-green-500" />
+                  <span className="text-xs font-medium">Secure</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-yellow-500" />
+                  <span className="text-xs font-medium">Fast</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs font-medium">Reliable</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <p className="text-gray-500 text-sm">
+                Powered by{' '}
+                <span className="text-purple-600 font-semibold">
+                  AWS Cognito
+                </span>
+              </p>
+            </div>
+
+            {/* Sign Out Button */}
+
+            <div className="text-center mt-4">
+              <button
+                onClick={handleSignout}
+                className="text-sm font-semibold text-red-500 hover:underline"
+              >
+                Sign Out
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
     </div>
   );
-};
+}
 
 export default Auth;

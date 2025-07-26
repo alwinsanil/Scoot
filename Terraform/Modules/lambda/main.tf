@@ -18,10 +18,10 @@ resource "aws_lambda_function" "auth_api" {
       PROJECT_NAME          = var.project_name
       ENVIRONMENT           = var.environment
       LOG_LEVEL             = "INFO"
-      COGNITO_CLIENT_ID     = "3tcb78k8ksrv41965lh8hfpqla"
-      COGNITO_CLIENT_SECRET = "1mgminem2rb2rmlurnpvphn6g6eghnq4read2i020jj7mijmdbvm"
-      COGNITO_DOMAIN        = "dalscooter-auth-21645.auth.us-east-1.amazoncognito.com"
-      REDIRECT_URI          = "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+      COGNITO_CLIENT_ID     = var.cognito_client_id
+      COGNITO_CLIENT_SECRET = var.cognito_client_secret
+      COGNITO_DOMAIN        = "${var.cognito_domain}.auth.${var.aws_region}.amazoncognito.com"
+      REDIRECT_URI          = "${var.api_url}/auth/callback"
     }
   }
 
@@ -109,9 +109,11 @@ resource "aws_lambda_function" "user_api" {
 
   environment {
     variables = {
-      PROJECT_NAME = var.project_name
-      ENVIRONMENT  = var.environment
-      LOG_LEVEL    = "INFO"
+      PROJECT_NAME         = var.project_name
+      ENVIRONMENT          = var.environment
+      LOG_LEVEL            = "INFO"
+      COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+      REGION               = var.aws_region
     }
   }
 
@@ -125,5 +127,52 @@ resource "aws_lambda_function" "user_api" {
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "user_lambda_logs" {
   name              = "/aws/lambda/${aws_lambda_function.user_api.function_name}"
+  retention_in_days = 7
+}
+
+# owner-api
+# Create deployment package
+data "archive_file" "owner_lambda_zip" {
+  type        = "zip"
+  output_path = "${path.module}/owner-api.zip"
+
+  source {
+    content  = file("${path.module}../../../../Backend/Routes/owner-api.js")
+    filename = "owner-api.js"
+  }
+}
+
+# Lambda function
+resource "aws_lambda_function" "owner_api" {
+  filename      = data.archive_file.owner_lambda_zip.output_path
+  function_name = "${var.project_name}-${var.environment}-owner-api"
+  role          = var.lambda_role_arn
+  handler       = "owner-api.lambdaHandler"
+  runtime       = "nodejs18.x"
+  timeout       = 30
+  memory_size   = 128
+
+  source_code_hash = data.archive_file.owner_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      PROJECT_NAME         = var.project_name
+      ENVIRONMENT          = var.environment
+      LOG_LEVEL            = "INFO"
+      COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+      REGION               = var.aws_region
+    }
+  }
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+    Component   = "api"
+  }
+}
+
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "owner_lambda_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.owner_api.function_name}"
   retention_in_days = 7
 }

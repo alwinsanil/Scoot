@@ -20,3 +20,8 @@ output "user_pool_id" {
 output "client_id" {
   value = module.cognito.client_id
 }
+output "user_pool_client_secret" {
+  value = module.cognito.user_pool_client_secret
+  sensitive   = true
+}
+

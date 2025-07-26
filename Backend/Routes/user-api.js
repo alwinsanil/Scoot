@@ -12,38 +12,72 @@ exports.lambdaHandler = async (event) => {
         bodyJson = JSON.parse(body);
     } catch (e) {}
 
-    let responseBody;
-
-    if (path.includes('/user')) {
-        responseBody = handleUserRequest(pathParts, httpMethod, queryParams, bodyJson, headers);
-    } else {
-        responseBody = {
-            error: 'Unknown path',
+    // Extract user info from JWT token (already validated by API Gateway)
+    const userInfo = extractUserInfo(headers);
+    
+    // Check if user is authenticated
+    if (!userInfo.isAuthenticated) {
+        return {
+            statusCode: 401,
+            headers: getCorsHeaders(),
+            body: JSON.stringify({
+                error: 'Unauthorized',
+                message: 'Valid JWT token required'
+            })
         };
     }
 
+    let responseBody;
+
+    responseBody = handleUserRequest(pathParts, httpMethod, queryParams, bodyJson, headers, userInfo);
+
     return {
         statusCode: 200,
-        headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
-        },
+        headers: getCorsHeaders(),
         body: JSON.stringify(responseBody, null, 2),
     };
 };
 
-function handleUserRequest(pathParts, method, queryParams, body, headers) {
-    /** Handle requests to authenticated user endpoints */
-    // Extract the specific user endpoint (pathParts[2] if path is /user/endpoint)
+function extractUserInfo(headers) {
+    try {
+        // Get Authorization header
+        const authHeader = headers.Authorization || headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return { isAuthenticated: false };
+        }
+
+        // Extract JWT token (already validated by API Gateway)
+        const token = authHeader.replace('Bearer ', '');
+        
+        // Decode JWT payload (no need to verify since API Gateway already did)
+        const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+        
+        // Extract user information
+        const userId = payload.sub;
+        const email = payload.email;
+        const groups = payload['cognito:groups'] || [];
+        
+        return {
+            isAuthenticated: true,
+            userId: userId,
+            email: email,
+            groups: groups
+        };
+    } catch (error) {
+        console.error('Error extracting user info:', error);
+        return { isAuthenticated: false };
+    }
+}
+
+
+
+function handleUserRequest(pathParts, method, queryParams, body, headers, userInfo) {
     const endpoint = pathParts.length > 2 ? pathParts[2] : null;
-    const userId = headers.Authorization ? headers.Authorization.split(' ').pop() : null;
 
     const scooterActions = {
-        GET: 'Get scooter details',
+        GET: 'Get available scooters',
         POST: 'Reserve scooter',
-        PUT: 'Update scooter status',
+        PUT: 'Update scooter reservation',
         DELETE: 'Cancel reservation'
     };
 
@@ -66,32 +100,48 @@ function handleUserRequest(pathParts, method, queryParams, body, headers) {
             endpoint: 'user/scooters',
             method: method,
             message: 'User scooter management',
-            userId: userId,
-            action: scooterActions[method] || 'Unknown action'
+            userId: userInfo.userId,
+            userRole: 'user',
+            action: scooterActions[method] || 'Unknown action',
+            permissions: 'User can view and reserve scooters'
         };
     } else if (endpoint === 'rides') {
         return {
             endpoint: 'user/rides',
             method: method,
             message: 'User ride management',
-            userId: userId,
-            action: rideActions[method] || 'Unknown action'
+            userId: userInfo.userId,
+            userRole: 'user',
+            action: rideActions[method] || 'Unknown action',
+            permissions: 'User can manage their own rides'
         };
     } else if (endpoint === 'profile') {
         return {
             endpoint: 'user/profile',
             method: method,
             message: 'User profile management',
-            userId: userId,
-            action: profileActions[method] || 'Unknown action'
+            userId: userInfo.userId,
+            userRole: 'user',
+            action: profileActions[method] || 'Unknown action',
+            permissions: 'User can manage their own profile'
         };
     } else {
         return {
             endpoint: 'user',
             method: method,
             message: 'Unknown user endpoint',
-            userId: userId,
+            userId: userInfo.userId,
+            userRole: 'user',
             availableUserEndpoints: ['scooters', 'rides', 'profile']
         };
     }
+}
+
+function getCorsHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
+    };
 }
