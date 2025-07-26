@@ -99,7 +99,7 @@ resource "aws_cognito_user_pool_client" "client" {
   
   # OAuth settings
   callback_urls = ["https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
-  logout_urls   = ["https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/logout"]
+  logout_urls   = ["http://localhost:5173"]
   default_redirect_uri = "https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
   
   allowed_oauth_flows = ["code"]

@@ -10,7 +10,7 @@ function Auth() {
   const isAuthenticated = !!sessionStorage.getItem("cognitoToken");
 
   // AWS Cognito Configuration
-  
+
 
   // Check for auth data from POST redirect handler
   useEffect(() => {
@@ -79,21 +79,19 @@ function Auth() {
           <div className="flex mb-8 bg-gray-100/60 rounded-xl p-1 border border-gray-200/50">
             <button
               onClick={() => setAuthMode('login')}
-              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-colors ${
-                authMode === 'login'
-                  ? 'bg-white text-purple-600 shadow-sm border border-purple-100'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-colors ${authMode === 'login'
+                ? 'bg-white text-purple-600 shadow-sm border border-purple-100'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               Sign In
             </button>
             <button
               onClick={() => setAuthMode('signup')}
-              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-colors ${
-                authMode === 'signup'
-                  ? 'bg-white text-pink-600 shadow-sm border border-pink-100'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-colors ${authMode === 'signup'
+                ? 'bg-white text-pink-600 shadow-sm border border-pink-100'
+                : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               Sign Up
             </button>
@@ -163,16 +161,16 @@ function Auth() {
             </div>
 
             {/* Sign Out Button */}
-            {isAuthenticated && (
-              <div className="text-center mt-4">
-                <button
-                  onClick={handleSignout}
-                  className="text-sm font-semibold text-red-500 hover:underline"
-                >
-                  Sign Out
-                </button>
-              </div>
-            )}
+
+            <div className="text-center mt-4">
+              <button
+                onClick={handleSignout}
+                className="text-sm font-semibold text-red-500 hover:underline"
+              >
+                Sign Out
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
