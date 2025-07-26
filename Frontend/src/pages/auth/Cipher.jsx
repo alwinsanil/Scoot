@@ -37,12 +37,28 @@ function Cipher() {
       });
 
       const data = await response.json();
-      console.log(data);
+      console.log('Full API response:', data);
+      console.log('Received data:', data.idToken);
+      
       if (!response.ok) {
         throw new Error(data.error || 'Verification failed');
       }
 
       setIsValid(true);
+      
+      // Save ID TOKEN to session storage for API calls 
+      if (data.idToken) {
+        sessionStorage.setItem('jwt', data.idToken);
+        console.log('ID token saved for API calls:', data.idToken.substring(0, 20) + '...');
+      } else {
+        console.warn('No idToken found in response - API calls will fail');
+      }
+
+      // Save user data if available
+      if (data.user) {
+        sessionStorage.setItem('user', JSON.stringify(data.user));
+      }
+
       // Proceed to next step or show success
       setTimeout(() => {
         navigate('/', { state: data });
