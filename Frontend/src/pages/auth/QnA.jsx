@@ -35,6 +35,7 @@ function QnA() {
   const urlParams = new URLSearchParams(window.location.search);
   const encodedData = urlParams.get('data');
   const authData = JSON.parse(atob(encodedData));
+  console.log('Auth Data:', authData);
 
   const handleQnaSubmit = async () => {
     setIsLoading(true);

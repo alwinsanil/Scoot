@@ -1,3 +1,6 @@
+
+
+# AWS Cognito User Pool
 resource "aws_cognito_user_pool" "dalscooter" {
   name = var.cognito_user_pool_name
 
@@ -94,9 +97,9 @@ resource "aws_cognito_user_pool_client" "client" {
   generate_secret = true
   
   # OAuth settings
-  callback_urls = ["https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
-  logout_urls   = ["https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/logout"]
-  default_redirect_uri = "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+  callback_urls = ["https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
+  logout_urls   = ["https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/logout"]
+  default_redirect_uri = "https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
   
   allowed_oauth_flows = ["code"]
   allowed_oauth_scopes = ["email", "openid", "profile"]
@@ -141,6 +144,7 @@ resource "aws_cognito_user_pool_client" "client" {
   prevent_user_existence_errors = "ENABLED"
 }
 
+# Random suffix for domain uniqueness
 resource "random_integer" "domain_suffix" {
   min = 10000
   max = 99999
@@ -150,4 +154,33 @@ resource "random_integer" "domain_suffix" {
 resource "aws_cognito_user_pool_domain" "domain" {
   domain       = "dalscooter-auth-${random_integer.domain_suffix.result}"
   user_pool_id = aws_cognito_user_pool.dalscooter.id
+}
+
+# ========================================
+# COGNITO GROUPS FOR ROLE-BASED ACCESS
+# NOTE: Correct resource type is aws_cognito_user_group (NOT aws_cognito_user_pool_group)
+# ========================================
+
+# Users Group - Standard app users
+resource "aws_cognito_user_group" "users" {
+  name         = "users"
+  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  description  = "Standard users who can rent scooters"
+  precedence   = 10  # Lower precedence (higher number)
+}
+
+# Owners Group - Scooter owners who can list their scooters
+resource "aws_cognito_user_group" "owners" {
+  name         = "owners"
+  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  description  = "Scooter owners who can list and manage their scooters"
+  precedence   = 5   # Higher precedence (lower number)
+}
+
+# Admins Group - System administrators (optional)
+resource "aws_cognito_user_group" "admins" {
+  name         = "admins"
+  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  description  = "System administrators with full access"
+  precedence   = 1   # Highest precedence (lowest number)
 }

@@ -18,10 +18,10 @@ resource "aws_lambda_function" "auth_api" {
       PROJECT_NAME          = var.project_name
       ENVIRONMENT           = var.environment
       LOG_LEVEL             = "INFO"
-      COGNITO_CLIENT_ID     = "3tcb78k8ksrv41965lh8hfpqla"
-      COGNITO_CLIENT_SECRET = "1mgminem2rb2rmlurnpvphn6g6eghnq4read2i020jj7mijmdbvm"
-      COGNITO_DOMAIN        = "dalscooter-auth-21645.auth.us-east-1.amazoncognito.com"
-      REDIRECT_URI          = "https://tupiqo0472.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+      COGNITO_CLIENT_ID     = "1hki99totvkb99vddorjkhh7bg"
+      COGNITO_CLIENT_SECRET = "f9oopnjin2shh3t96lgpoerr8ds4e76omv62gnqcq83niu6nnrv"
+      COGNITO_DOMAIN        = "dalscooter-auth-13288.auth.us-east-1.amazoncognito.com"
+      REDIRECT_URI          = "https://tn4egaaps4.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
     }
   }
 
