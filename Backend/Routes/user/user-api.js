@@ -4,6 +4,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 const VEHICLES_TABLE = process.env.VEHICLES_TABLE || 'franchise-vehicles';
 const RESERVATIONS_TABLE = process.env.RESERVATIONS_TABLE || 'vehicle-reservations';
+const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE || 'vehicle-feedback';
 
 exports.lambdaHandler = async (event) => {
     console.log('Event received:', JSON.stringify(event, null, 2));
@@ -122,7 +123,7 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
     if (pathParts.includes('user')) {
         const userIndex = pathParts.indexOf('user');
         userType = 'user';
-        endpoint = pathParts[userIndex + 1]; // scooters, rides, profile, etc.
+        endpoint = pathParts[userIndex + 1]; // scooters, rides, profile, feedback, etc.
         resourceId = pathParts[userIndex + 2]; // specific ID if present
     }
     
@@ -139,6 +140,9 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
         
         case 'reservations':
             return await handleReservationEndpoint(method, resourceId, queryParams, body, userInfo);
+        
+        case 'feedback':
+            return await handleFeedbackEndpoint(method, resourceId, queryParams, body, userInfo);
         
         case 'rides':
             return await handleRideEndpoint(method, resourceId, queryParams, body, userInfo);
@@ -157,6 +161,9 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
                     'GET /user/reservations': 'Get user reservations',
                     'PUT /user/reservations/{id}': 'Update reservation',
                     'DELETE /user/reservations/{id}': 'Cancel reservation',
+                    'POST /user/feedback': 'Submit feedback for a completed ride',
+                    'GET /user/feedback': 'Get user feedback history',
+                    'GET /user/feedback/{id}': 'Get specific feedback',
                     'POST /user/rides': 'Start a ride from reservation',
                     'GET /user/rides': 'Get ride history',
                     'PUT /user/rides/{id}': 'Update ride status',
@@ -197,6 +204,10 @@ async function handleReservationEndpoint(method, reservationId, queryParams, bod
             if (!reservationId) {
                 throw { statusCode: 400, message: 'Reservation ID is required for updates' };
             }
+            // Check if this is a completion request
+            if (body.action === 'complete') {
+                return await completeReservation(reservationId, userInfo);
+            }
             return await updateReservation(reservationId, body, userInfo);
         
         case 'DELETE':
@@ -207,6 +218,35 @@ async function handleReservationEndpoint(method, reservationId, queryParams, bod
         
         default:
             throw { statusCode: 405, message: `Method ${method} not allowed for reservations endpoint` };
+    }
+}
+
+async function handleFeedbackEndpoint(method, feedbackId, queryParams, body, userInfo) {
+    switch (method) {
+        case 'GET':
+            if (feedbackId) {
+                return await getFeedback(feedbackId, userInfo);
+            } else {
+                return await getUserFeedback(userInfo, queryParams);
+            }
+        
+        case 'POST':
+            return await submitFeedback(body, userInfo);
+        
+        case 'PUT':
+            if (!feedbackId) {
+                throw { statusCode: 400, message: 'Feedback ID is required for updates' };
+            }
+            return await updateFeedback(feedbackId, body, userInfo);
+        
+        case 'DELETE':
+            if (!feedbackId) {
+                throw { statusCode: 400, message: 'Feedback ID is required for deletion' };
+            }
+            return await deleteFeedback(feedbackId, userInfo);
+        
+        default:
+            throw { statusCode: 405, message: `Method ${method} not allowed for feedback endpoint` };
     }
 }
 
@@ -436,23 +476,6 @@ async function createReservation(reservationData, userInfo) {
     await dynamodb.put(reservationParams).promise();
 
     // Update vehicle status to reserved
-    const vehicleUpdateParams = {
-        TableName: VEHICLES_TABLE,
-        Key: {
-            vehicleId: reservationData.vehicleId,
-            ownerId: vehicle.vehicle.ownerId // We need to get this from the original scan
-        },
-        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-            '#status': 'status'
-        },
-        ExpressionAttributeValues: {
-            ':status': 'reserved',
-            ':updatedAt': timestamp
-        }
-    };
-
-    // We need to get the owner ID first
     const vehicleParams = {
         TableName: VEHICLES_TABLE,
         FilterExpression: 'vehicleId = :vehicleId',
@@ -463,7 +486,22 @@ async function createReservation(reservationData, userInfo) {
 
     const vehicleResult = await dynamodb.scan(vehicleParams).promise();
     if (vehicleResult.Items && vehicleResult.Items.length > 0) {
-        vehicleUpdateParams.Key.ownerId = vehicleResult.Items[0].ownerId;
+        const vehicleItem = vehicleResult.Items[0];
+        const vehicleUpdateParams = {
+            TableName: VEHICLES_TABLE,
+            Key: {
+                vehicleId: reservationData.vehicleId,
+                ownerId: vehicleItem.ownerId
+            },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
+            ExpressionAttributeValues: {
+                ':status': 'reserved',
+                ':updatedAt': timestamp
+            }
+        };
         await dynamodb.update(vehicleUpdateParams).promise();
     }
 
@@ -711,6 +749,309 @@ async function cancelReservation(reservationId, userInfo) {
     };
 }
 
+async function completeReservation(reservationId, userInfo) {
+    console.log('Completing reservation:', reservationId, 'for user:', userInfo.userId);
+    
+    // Get existing reservation
+    const existingReservation = await getReservation(reservationId, userInfo);
+    const reservation = existingReservation.reservation;
+    
+    if (reservation.status === 'completed') {
+        throw { statusCode: 400, message: 'Reservation is already completed' };
+    }
+    
+    if (reservation.status === 'cancelled') {
+        throw { statusCode: 400, message: 'Cannot complete a cancelled reservation' };
+    }
+    
+    // Update reservation status to completed
+    const timestamp = new Date().toISOString();
+    const params = {
+        TableName: RESERVATIONS_TABLE,
+        Key: {
+            reservationId: reservationId,
+            userId: userInfo.userId
+        },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, completedAt = :completedAt',
+        ExpressionAttributeNames: {
+            '#status': 'status'
+        },
+        ExpressionAttributeValues: {
+            ':status': 'completed',
+            ':updatedAt': timestamp,
+            ':completedAt': timestamp
+        },
+        ReturnValues: 'ALL_NEW'
+    };
+
+    const result = await dynamodb.update(params).promise();
+    
+    // Update vehicle status back to available
+    const vehicleParams = {
+        TableName: VEHICLES_TABLE,
+        FilterExpression: 'vehicleId = :vehicleId',
+        ExpressionAttributeValues: {
+            ':vehicleId': reservation.vehicleId
+        }
+    };
+
+    const vehicleResult = await dynamodb.scan(vehicleParams).promise();
+    if (vehicleResult.Items && vehicleResult.Items.length > 0) {
+        const vehicle = vehicleResult.Items[0];
+        const vehicleUpdateParams = {
+            TableName: VEHICLES_TABLE,
+            Key: {
+                vehicleId: reservation.vehicleId,
+                ownerId: vehicle.ownerId
+            },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
+            ExpressionAttributeValues: {
+                ':status': 'available',
+                ':updatedAt': timestamp
+            }
+        };
+        
+        await dynamodb.update(vehicleUpdateParams).promise();
+    }
+
+    return {
+        success: true,
+        reservation: result.Attributes,
+        message: 'Reservation completed successfully. Thank you for using our service!'
+    };
+}
+
+// Feedback-related functions
+async function submitFeedback(feedbackData, userInfo) {
+    console.log('Submitting feedback:', feedbackData, 'for user:', userInfo.userId);
+    
+    // Validate required fields
+    const requiredFields = ['reservationId', 'vehicleId', 'rating', 'subject', 'message'];
+    for (const field of requiredFields) {
+        if (!feedbackData[field]) {
+            throw { statusCode: 400, message: `${field} is required` };
+        }
+    }
+
+    // Validate rating
+    if (feedbackData.rating < 1 || feedbackData.rating > 5) {
+        throw { statusCode: 400, message: 'Rating must be between 1 and 5' };
+    }
+
+    // Verify reservation exists and belongs to user
+    const reservation = await getReservation(feedbackData.reservationId, userInfo);
+    
+    if (reservation.reservation.status !== 'completed') {
+        throw { statusCode: 400, message: 'Can only provide feedback for completed reservations' };
+    }
+
+    // Check if feedback already exists for this reservation
+    const existingFeedback = await checkExistingFeedback(feedbackData.reservationId, userInfo.userId);
+    if (existingFeedback) {
+        throw { statusCode: 409, message: 'Feedback already exists for this reservation' };
+    }
+
+    const feedbackId = generateFeedbackId();
+    const timestamp = new Date().toISOString();
+
+    const feedback = {
+        feedbackId: feedbackId,
+        userId: userInfo.userId,
+        userEmail: userInfo.email,
+        reservationId: feedbackData.reservationId,
+        vehicleId: feedbackData.vehicleId,
+        vehicleType: feedbackData.vehicleType,
+        vehicleModel: feedbackData.vehicleModel,
+        rating: parseInt(feedbackData.rating),
+        category: feedbackData.category || 'overall',
+        subject: feedbackData.subject.trim(),
+        message: feedbackData.message.trim(),
+        wouldRecommend: feedbackData.wouldRecommend !== false, // default to true
+        issues: feedbackData.issues || [],
+        createdAt: timestamp,
+        updatedAt: timestamp
+    };
+
+    const params = {
+        TableName: FEEDBACK_TABLE,
+        Item: feedback,
+        ConditionExpression: 'attribute_not_exists(feedbackId)'
+    };
+
+    await dynamodb.put(params).promise();
+
+    return {
+        success: true,
+        feedback: feedback,
+        message: 'Feedback submitted successfully'
+    };
+}
+
+async function getUserFeedback(userInfo, queryParams) {
+    console.log('Getting feedback for user:', userInfo.userId);
+    
+    const params = {
+        TableName: FEEDBACK_TABLE,
+        FilterExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+            ':userId': userInfo.userId
+        }
+    };
+
+    // Add filters if provided
+    if (queryParams.rating) {
+        params.FilterExpression += ' AND rating = :rating';
+        params.ExpressionAttributeValues[':rating'] = parseInt(queryParams.rating);
+    }
+
+    if (queryParams.category) {
+        params.FilterExpression += ' AND category = :category';
+        params.ExpressionAttributeValues[':category'] = queryParams.category;
+    }
+
+    if (queryParams.vehicleType) {
+        params.FilterExpression += ' AND vehicleType = :vehicleType';
+        params.ExpressionAttributeValues[':vehicleType'] = queryParams.vehicleType;
+    }
+
+    const result = await dynamodb.scan(params).promise();
+    
+    // Sort by creation date (newest first)
+    const feedback = (result.Items || []).sort((a, b) => 
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    
+    return {
+        success: true,
+        feedback: feedback,
+        count: feedback.length,
+        message: 'Feedback retrieved successfully'
+    };
+}
+
+async function getFeedback(feedbackId, userInfo) {
+    console.log('Getting feedback:', feedbackId, 'for user:', userInfo.userId);
+    
+    const params = {
+        TableName: FEEDBACK_TABLE,
+        FilterExpression: 'feedbackId = :feedbackId AND userId = :userId',
+        ExpressionAttributeValues: {
+            ':feedbackId': feedbackId,
+            ':userId': userInfo.userId
+        }
+    };
+
+    const result = await dynamodb.scan(params).promise();
+    
+    if (!result.Items || result.Items.length === 0) {
+        throw { statusCode: 404, message: 'Feedback not found' };
+    }
+
+    return {
+        success: true,
+        feedback: result.Items[0],
+        message: 'Feedback retrieved successfully'
+    };
+}
+
+async function updateFeedback(feedbackId, updateData, userInfo) {
+    console.log('Updating feedback:', feedbackId, 'for user:', userInfo.userId);
+    
+    // Get existing feedback
+    const existingFeedback = await getFeedback(feedbackId, userInfo);
+    const feedback = existingFeedback.feedback;
+    
+    // Only allow updates within 24 hours of submission
+    const feedbackCreated = new Date(feedback.createdAt);
+    const now = new Date();
+    const hoursSinceCreated = (now - feedbackCreated) / (1000 * 60 * 60);
+    
+    if (hoursSinceCreated > 24) {
+        throw { statusCode: 400, message: 'Cannot update feedback older than 24 hours' };
+    }
+    
+    // Only allow certain fields to be updated
+    const allowedUpdates = ['rating', 'category', 'subject', 'message', 'wouldRecommend', 'issues'];
+    const updates = {};
+    
+    for (const field of allowedUpdates) {
+        if (updateData[field] !== undefined) {
+            if (field === 'rating') {
+                if (updateData[field] < 1 || updateData[field] > 5) {
+                    throw { statusCode: 400, message: 'Rating must be between 1 and 5' };
+                }
+                updates[field] = parseInt(updateData[field]);
+            } else if (field === 'subject' || field === 'message') {
+                if (!updateData[field].trim()) {
+                    throw { statusCode: 400, message: `${field} cannot be empty` };
+                }
+                updates[field] = updateData[field].trim();
+            } else {
+                updates[field] = updateData[field];
+            }
+        }
+    }
+    
+    if (Object.keys(updates).length === 0) {
+        throw { statusCode: 400, message: 'No valid fields to update' };
+    }
+    
+    // Build update expression
+    let updateExpression = 'SET updatedAt = :updatedAt';
+    let expressionAttributeValues = {
+        ':updatedAt': new Date().toISOString()
+    };
+    
+    Object.keys(updates).forEach(field => {
+        updateExpression += `, ${field} = :${field}`;
+        expressionAttributeValues[`:${field}`] = updates[field];
+    });
+    
+    const params = {
+        TableName: FEEDBACK_TABLE,
+        Key: {
+            feedbackId: feedbackId,
+            userId: userInfo.userId
+        },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+    };
+
+    const result = await dynamodb.update(params).promise();
+
+    return {
+        success: true,
+        feedback: result.Attributes,
+        message: 'Feedback updated successfully'
+    };
+}
+
+async function deleteFeedback(feedbackId, userInfo) {
+    console.log('Deleting feedback:', feedbackId, 'for user:', userInfo.userId);
+    
+    // Get existing feedback to verify ownership
+    await getFeedback(feedbackId, userInfo);
+    
+    const params = {
+        TableName: FEEDBACK_TABLE,
+        Key: {
+            feedbackId: feedbackId,
+            userId: userInfo.userId
+        }
+    };
+
+    await dynamodb.delete(params).promise();
+
+    return {
+        success: true,
+        message: 'Feedback deleted successfully'
+    };
+}
+
 // Ride-related functions (basic implementation)
 async function startRide(rideData, userInfo) {
     // Basic implementation - you can expand this
@@ -807,8 +1148,26 @@ async function checkReservationConflicts(vehicleId, startDate, endDate, excludeR
     return false;
 }
 
+async function checkExistingFeedback(reservationId, userId) {
+    const params = {
+        TableName: FEEDBACK_TABLE,
+        FilterExpression: 'reservationId = :reservationId AND userId = :userId',
+        ExpressionAttributeValues: {
+            ':reservationId': reservationId,
+            ':userId': userId
+        }
+    };
+
+    const result = await dynamodb.scan(params).promise();
+    return result.Items && result.Items.length > 0;
+}
+
 function generateReservationId() {
     return 'reservation_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+}
+
+function generateFeedbackId() {
+    return 'feedback_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
 }
 
 function getCorsHeaders() {

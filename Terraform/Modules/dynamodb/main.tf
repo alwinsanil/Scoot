@@ -131,3 +131,86 @@ resource "aws_dynamodb_table" "vehicle_reservations" {
 
   tags = var.tags
 }
+
+resource "aws_dynamodb_table" "vehicle_feedback" {
+  name         = "vehicle-feedback"
+  billing_mode = var.billing_mode
+  hash_key     = "feedbackId"
+  range_key    = "userId"
+
+  attribute {
+    name = "feedbackId"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "reservationId"
+    type = "S"
+  }
+
+  attribute {
+    name = "vehicleId"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  attribute {
+    name = "rating"
+    type = "N"
+  }
+
+  attribute {
+    name = "vehicleType"
+    type = "S"
+  }
+
+  # Global Secondary Index for querying feedback by userId
+  global_secondary_index {
+    name            = "userId-index"
+    hash_key        = "userId"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying feedback by reservationId (to check if feedback exists)
+  global_secondary_index {
+    name            = "reservationId-index"
+    hash_key        = "reservationId"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying feedback by vehicleId (for vehicle analytics)
+  global_secondary_index {
+    name            = "vehicleId-index"
+    hash_key        = "vehicleId"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying feedback by rating (for analytics)
+  global_secondary_index {
+    name            = "rating-index"
+    hash_key        = "rating"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying feedback by vehicle type (for vehicle type analytics)
+  global_secondary_index {
+    name            = "vehicleType-index"
+    hash_key        = "vehicleType"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  tags = var.tags
+}

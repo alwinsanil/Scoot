@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Calendar, Clock, MapPin, Battery, Star, Filter, X, Plus, Edit, Trash2, Eye, Car, Bike, AlertCircle } from 'lucide-react';
-import { redirectBaseUri } from '../contants/constants'; 
+import { Search, Calendar, Clock, MapPin, Battery, Star, Filter, X, Plus, Edit, Trash2, Eye, Car, Bike, AlertCircle, MessageSquare, ThumbsUp, ThumbsDown, Send, CheckCircle } from 'lucide-react';
+import { redirectBaseUri } from '../contants/constants';
+
 const User = () => {
   const [activeTab, setActiveTab] = useState('browse');
   const [vehicles, setVehicles] = useState([]);
   const [reservations, setReservations] = useState([]);
+  const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showReservationModal, setShowReservationModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [selectedReservation, setSelectedReservation] = useState(null);
   const [filters, setFilters] = useState({
     type: '',
     location: '',
@@ -20,6 +24,14 @@ const User = () => {
     endDate: '',
     discountCode: '',
     notes: ''
+  });
+  const [feedbackForm, setFeedbackForm] = useState({
+    rating: 5,
+    category: 'overall',
+    subject: '',
+    message: '',
+    wouldRecommend: true,
+    issues: []
   });
 
   // API Configuration
@@ -37,6 +49,8 @@ const User = () => {
       loadVehicles();
     } else if (activeTab === 'reservations') {
       loadReservations();
+    } else if (activeTab === 'feedback') {
+      loadFeedback();
     }
   }, [activeTab]);
 
@@ -97,6 +111,31 @@ const User = () => {
     }
   };
 
+  // Load user feedback from API
+  const loadFeedback = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/feedback`, {
+        method: 'GET',
+        headers: apiHeaders
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load feedback: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setFeedback(data.feedback || []);
+    } catch (err) {
+      console.error('Error loading feedback:', err);
+      setError('Failed to load feedback. Please try again.');
+      setFeedback([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Create new reservation via API
   const createReservation = async (reservationData) => {
     setLoading(true);
@@ -122,6 +161,31 @@ const User = () => {
     }
   };
 
+  // Submit feedback via API
+  const submitFeedback = async (feedbackData) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/feedback`, {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify(feedbackData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Failed to submit feedback: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Cancel reservation via API
   const cancelReservationAPI = async (reservationId) => {
     setLoading(true);
@@ -140,6 +204,31 @@ const User = () => {
       return data;
     } catch (err) {
       console.error('Error cancelling reservation:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Complete/Return reservation via API
+  const completeReservationAPI = async (reservationId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/reservations/${reservationId}`, {
+        method: 'PUT',
+        headers: apiHeaders,
+        body: JSON.stringify({ action: 'complete' })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Failed to complete reservation: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error('Error completing reservation:', err);
       throw err;
     } finally {
       setLoading(false);
@@ -187,6 +276,12 @@ const User = () => {
     }
   };
 
+  const getRatingColor = (rating) => {
+    if (rating >= 4) return 'text-green-500';
+    if (rating >= 3) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -227,6 +322,19 @@ const User = () => {
     setShowReservationModal(true);
   };
 
+  const handleFeedbackClick = (reservation) => {
+    setSelectedReservation(reservation);
+    setFeedbackForm({
+      rating: 5,
+      category: 'overall',
+      subject: '',
+      message: '',
+      wouldRecommend: true,
+      issues: []
+    });
+    setShowFeedbackModal(true);
+  };
+
   const handleReservationSubmit = async () => {
     if (!reservationForm.startDate || !reservationForm.endDate) {
       alert('Please select both start and end dates');
@@ -254,7 +362,6 @@ const User = () => {
         discountCode: reservationForm.discountCode || undefined,
         notes: reservationForm.notes || undefined
       };
-      console.log('Creating reservation with data:', reservationData);
       
       const result = await createReservation(reservationData);
       
@@ -270,13 +377,47 @@ const User = () => {
     }
   };
 
+  const handleFeedbackSubmit = async () => {
+    if (!feedbackForm.subject.trim() || !feedbackForm.message.trim()) {
+      alert('Please provide both subject and detailed feedback message');
+      return;
+    }
+
+    try {
+      const feedbackData = {
+        reservationId: selectedReservation.reservationId,
+        vehicleId: selectedReservation.vehicleId,
+        vehicleType: selectedReservation.vehicleType,
+        vehicleModel: selectedReservation.vehicleModel,
+        rating: feedbackForm.rating,
+        category: feedbackForm.category,
+        subject: feedbackForm.subject.trim(),
+        message: feedbackForm.message.trim(),
+        wouldRecommend: feedbackForm.wouldRecommend,
+        issues: feedbackForm.issues
+      };
+      
+      const result = await submitFeedback(feedbackData);
+      
+      if (result.success) {
+        setShowFeedbackModal(false);
+        setActiveTab('feedback');
+        alert('Feedback submitted successfully! Thank you for your input.');
+        await loadFeedback();
+      } else {
+        throw new Error(result.message || 'Failed to submit feedback');
+      }
+    } catch (err) {
+      alert(`Error submitting feedback: ${err.message}`);
+    }
+  };
+
   const handleCancelReservation = async (reservationId) => {
     if (confirm('Are you sure you want to cancel this reservation?')) {
       try {
         const result = await cancelReservationAPI(reservationId);
         
         if (result.success) {
-          // Reload reservations to get updated data
           await loadReservations();
           alert('Reservation cancelled successfully');
         } else {
@@ -287,6 +428,81 @@ const User = () => {
       }
     }
   };
+
+  const handleCompleteReservation = async (reservationId) => {
+    if (confirm('Are you sure you want to return this vehicle?')) {
+      try {
+        const result = await completeReservationAPI(reservationId);
+        
+        if (result.success) {
+          await loadReservations();
+          alert('Vehicle returned successfully!');
+        } else {
+          throw new Error(result.message || 'Failed to complete reservation');
+        }
+      } catch (err) {
+        alert(`Error completing reservation: ${err.message}`);
+      }
+    }
+  };
+
+  const handleIssueToggle = (issue) => {
+    setFeedbackForm(prev => ({
+      ...prev,
+      issues: prev.issues.includes(issue) 
+        ? prev.issues.filter(i => i !== issue)
+        : [...prev.issues, issue]
+    }));
+  };
+
+  const getCompletedReservations = () => {
+    return reservations.filter(reservation => reservation.status === 'completed');
+  };
+
+  const getReservationsThatCanReceiveFeedback = () => {
+    const completedReservations = getCompletedReservations();
+    const feedbackReservationIds = feedback.map(f => f.reservationId);
+    return completedReservations.filter(res => !feedbackReservationIds.includes(res.reservationId));
+  };
+
+  const renderStars = (rating, interactive = false, onRatingChange = null) => {
+    return (
+      <div className="flex space-x-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            className={`w-5 h-5 ${
+              star <= rating 
+                ? 'text-yellow-400 fill-current' 
+                : 'text-gray-300'
+            } ${interactive ? 'cursor-pointer hover:text-yellow-400' : ''}`}
+            onClick={interactive ? () => onRatingChange(star) : undefined}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  const feedbackCategories = [
+    { value: 'overall', label: 'Overall Experience' },
+    { value: 'vehicle_condition', label: 'Vehicle Condition' },
+    { value: 'battery_performance', label: 'Battery Performance' },
+    { value: 'comfort', label: 'Comfort & Ergonomics' },
+    { value: 'safety', label: 'Safety Features' },
+    { value: 'booking_process', label: 'Booking Process' },
+    { value: 'customer_service', label: 'Customer Service' }
+  ];
+
+  const commonIssues = [
+    'Battery died quickly',
+    'Vehicle was dirty',
+    'Mechanical problems',
+    'Uncomfortable ride',
+    'Poor GPS tracking',
+    'Difficulty finding vehicle',
+    'Charging issues',
+    'App problems'
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -320,6 +536,16 @@ const User = () => {
                 }`}
               >
                 My Reservations
+              </button>
+              <button
+                onClick={() => setActiveTab('feedback')}
+                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'feedback'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Feedback
               </button>
             </nav>
           </div>
@@ -526,11 +752,37 @@ const User = () => {
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(reservation.status)}`}>
                           {reservation.status.charAt(0).toUpperCase() + reservation.status.slice(1)}
                         </span>
+                        
+                        {/* Return Vehicle Button - Simple, just for confirmed reservations */}
+                        {reservation.status === 'confirmed' && (
+                          <button
+                            onClick={() => handleCompleteReservation(reservation.reservationId)}
+                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                            disabled={loading}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            <span>Return Vehicle</span>
+                          </button>
+                        )}
+                        
+                        {/* Leave Feedback Button */}
+                        {reservation.status === 'completed' && !feedback.some(f => f.reservationId === reservation.reservationId) && (
+                          <button
+                            onClick={() => handleFeedbackClick(reservation)}
+                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            <span>Leave Feedback</span>
+                          </button>
+                        )}
+                        
+                        {/* Cancel Reservation Button */}
                         {reservation.status === 'confirmed' && (
                           <button
                             onClick={() => handleCancelReservation(reservation.reservationId)}
                             className="text-red-600 hover:text-red-800"
                             disabled={loading}
+                            title="Cancel Reservation"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -577,6 +829,147 @@ const User = () => {
                         </p>
                       </div>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'feedback' && !loading && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">My Feedback</h2>
+              <div className="flex space-x-4">
+                {getReservationsThatCanReceiveFeedback().length > 0 && (
+                  <span className="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">
+                    {getReservationsThatCanReceiveFeedback().length} rides awaiting feedback
+                  </span>
+                )}
+                <button
+                  onClick={loadFeedback}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Pending Feedback Section */}
+            {getReservationsThatCanReceiveFeedback().length > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
+                <h3 className="text-lg font-semibold text-green-900 mb-4">
+                  <MessageSquare className="w-5 h-5 inline mr-2" />
+                  Completed Rides - Share Your Experience
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {getReservationsThatCanReceiveFeedback().map((reservation) => (
+                    <div key={reservation.reservationId} className="bg-white rounded-lg border p-4">
+                      <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          {getVehicleIcon(reservation.vehicleType)}
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900">{reservation.vehicleModel}</h4>
+                          <p className="text-sm text-gray-500">{formatDate(reservation.endDate)}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleFeedbackClick(reservation)}
+                        className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                      >
+                        Leave Feedback
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Submitted Feedback */}
+            {feedback.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No feedback submitted yet</h3>
+                <p className="text-gray-600 mb-4">Complete a ride to share your experience and help us improve our service.</p>
+                {getReservationsThatCanReceiveFeedback().length === 0 && (
+                  <button
+                    onClick={() => setActiveTab('browse')}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Browse Vehicles
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {feedback.map((feedbackItem) => (
+                  <div key={feedbackItem.feedbackId} className="bg-white rounded-lg shadow-sm border p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          {getVehicleIcon(feedbackItem.vehicleType)}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{feedbackItem.vehicleModel}</h3>
+                          <p className="text-sm text-gray-500 capitalize">
+                            {feedbackItem.vehicleType.replace('anebike', 'E-Bike')}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Submitted on {formatDate(feedbackItem.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center space-x-2 mb-2">
+                          {renderStars(feedbackItem.rating)}
+                          <span className={`text-sm font-medium ${getRatingColor(feedbackItem.rating)}`}>
+                            {feedbackItem.rating}/5
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                          {feedbackCategories.find(cat => cat.value === feedbackItem.category)?.label || feedbackItem.category}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900 mb-1">Subject</h4>
+                        <p className="text-sm text-gray-700">{feedbackItem.subject}</p>
+                      </div>
+                      
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900 mb-1">Feedback</h4>
+                        <p className="text-sm text-gray-700">{feedbackItem.message}</p>
+                      </div>
+
+                      {feedbackItem.issues && feedbackItem.issues.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 mb-2">Issues Reported</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {feedbackItem.issues.map((issue, index) => (
+                              <span key={index} className="inline-flex items-center px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
+                                {issue}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center space-x-4 pt-2 border-t border-gray-100">
+                        <div className="flex items-center space-x-2">
+                          {feedbackItem.wouldRecommend ? (
+                            <ThumbsUp className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <ThumbsDown className="w-4 h-4 text-red-600" />
+                          )}
+                          <span className="text-sm text-gray-600">
+                            {feedbackItem.wouldRecommend ? 'Would recommend' : 'Would not recommend'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -692,6 +1085,165 @@ const User = () => {
                     disabled={loading}
                   >
                     {loading ? 'Creating...' : 'Confirm Reservation'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && selectedReservation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Share Your Experience</h3>
+                <button
+                  onClick={() => setShowFeedbackModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    {getVehicleIcon(selectedReservation.vehicleType)}
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">{selectedReservation.vehicleModel}</h4>
+                    <p className="text-sm text-gray-500">
+                      {formatDate(selectedReservation.startDate)} - {formatDate(selectedReservation.endDate)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Rating */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">Overall Rating</label>
+                  <div className="flex items-center space-x-3">
+                    {renderStars(feedbackForm.rating, true, (rating) => 
+                      setFeedbackForm({...feedbackForm, rating})
+                    )}
+                    <span className="text-sm text-gray-600">
+                      {feedbackForm.rating === 1 && 'Poor'}
+                      {feedbackForm.rating === 2 && 'Fair'}
+                      {feedbackForm.rating === 3 && 'Good'}
+                      {feedbackForm.rating === 4 && 'Very Good'}
+                      {feedbackForm.rating === 5 && 'Excellent'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Feedback Category</label>
+                  <select
+                    value={feedbackForm.category}
+                    onChange={(e) => setFeedbackForm({...feedbackForm, category: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {feedbackCategories.map(category => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Subject */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                  <input
+                    type="text"
+                    value={feedbackForm.subject}
+                    onChange={(e) => setFeedbackForm({...feedbackForm, subject: e.target.value})}
+                    placeholder="Brief summary of your experience..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Message */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Detailed Feedback</label>
+                  <textarea
+                    value={feedbackForm.message}
+                    onChange={(e) => setFeedbackForm({...feedbackForm, message: e.target.value})}
+                    rows={4}
+                    placeholder="Tell us about your experience with this vehicle..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Issues */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Any Issues? (Select all that apply)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {commonIssues.map((issue) => (
+                      <label key={issue} className="flex items-center space-x-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={feedbackForm.issues.includes(issue)}
+                          onChange={() => handleIssueToggle(issue)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-gray-700">{issue}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recommendation */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Would you recommend this vehicle to others?
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="recommend"
+                        checked={feedbackForm.wouldRecommend === true}
+                        onChange={() => setFeedbackForm({...feedbackForm, wouldRecommend: true})}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Yes</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="recommend"
+                        checked={feedbackForm.wouldRecommend === false}
+                        onChange={() => setFeedbackForm({...feedbackForm, wouldRecommend: false})}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">No</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowFeedbackModal(false)}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleFeedbackSubmit}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
+                    disabled={loading || !feedbackForm.subject.trim() || !feedbackForm.message.trim()}
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{loading ? 'Submitting...' : 'Submit Feedback'}</span>
                   </button>
                 </div>
               </div>
