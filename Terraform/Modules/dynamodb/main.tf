@@ -67,3 +67,67 @@ resource "aws_dynamodb_table" "franchise_vehicles" {
 
   tags = var.tags
 }
+
+resource "aws_dynamodb_table" "vehicle_reservations" {
+  name         = "vehicle-reservations"
+  billing_mode = var.billing_mode
+  hash_key     = "reservationId"
+  range_key    = "userId"
+
+  attribute {
+    name = "reservationId"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "vehicleId"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  attribute {
+    name = "startDate"
+    type = "S"
+  }
+
+  # Global Secondary Index for querying reservations by userId
+  global_secondary_index {
+    name            = "userId-index"
+    hash_key        = "userId"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying reservations by vehicleId
+  global_secondary_index {
+    name            = "vehicleId-index"
+    hash_key        = "vehicleId"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying reservations by status
+  global_secondary_index {
+    name            = "status-index"
+    hash_key        = "status"
+    range_key       = "startDate"
+    projection_type = "ALL"
+  }
+
+  # Global Secondary Index for querying reservations by vehicleId and status (for conflict checking)
+  global_secondary_index {
+    name            = "vehicleId-status-index"
+    hash_key        = "vehicleId"
+    range_key       = "status"
+    projection_type = "ALL"
+  }
+
+  tags = var.tags
+}

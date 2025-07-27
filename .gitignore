@@ -6,3 +6,4 @@ Terraform/.terraform/*
 Frontend/node_modules
 Backend/Routes/auth/node_modules
 Backend/Routes/owner/node_modules
+Backend/Routes/user/node_modules
