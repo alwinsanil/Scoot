@@ -1,30 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Calendar, Clock, MapPin, Battery, Star, Filter, X, Plus, Edit, Trash2, Eye, Car, Bike, AlertCircle, MessageSquare, ThumbsUp, ThumbsDown, Send, CheckCircle } from 'lucide-react';
+import { Search, Calendar, Clock, MapPin, Battery, Star, Filter, X, Plus, Edit, Trash2, Eye, Car, Bike, AlertCircle, MessageSquare, ThumbsUp, ThumbsDown, Send, CheckCircle, ChevronDown, ChevronUp, Users, BarChart3, LogIn, LogOut } from 'lucide-react';
 import { redirectBaseUri } from '../contants/constants';
 
 const User = () => {
+  // State management
   const [activeTab, setActiveTab] = useState('browse');
   const [vehicles, setVehicles] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [feedback, setFeedback] = useState([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [feedbackAnalytics, setFeedbackAnalytics] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    sentiment: '',
+    rating: '',
+    severity: ''
+  });
+
+  // Modal states
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showFeedbackAnalyticsModal, setShowFeedbackAnalyticsModal] = useState(false);
+
+  // Selected items
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [selectedReservation, setSelectedReservation] = useState(null);
+  const [expandedVehicles, setExpandedVehicles] = useState({});
+
+  // Form states
   const [filters, setFilters] = useState({
     type: '',
     location: '',
     maxRate: '',
     showFilters: false
   });
+
   const [reservationForm, setReservationForm] = useState({
     startDate: '',
     endDate: '',
     discountCode: '',
     notes: ''
   });
+
   const [feedbackForm, setFeedbackForm] = useState({
     rating: 5,
     category: 'overall',
@@ -36,303 +56,216 @@ const User = () => {
 
   // API Configuration
   const API_BASE_URL = `${redirectBaseUri}/dev`;
-  const JWT_TOKEN = sessionStorage.getItem('jwt');
 
-  const apiHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': JWT_TOKEN ? `Bearer ${JWT_TOKEN}` : ''
+  const getApiHeaders = (requireAuth = false) => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (requireAuth) {
+      const token = sessionStorage.getItem('jwt');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
   };
 
-  // Load data on component mount and tab changes
+  // Check authentication on mount
   useEffect(() => {
-    if (activeTab === 'browse') {
-      loadVehicles();
-    } else if (activeTab === 'reservations') {
-      loadReservations();
-    } else if (activeTab === 'feedback') {
-      loadFeedback();
-    }
-  }, [activeTab]);
+    setIsAuthenticated(!!sessionStorage.getItem('jwt'));
+  }, []);
 
-  // Load available vehicles from API
+  // Load data based on active tab
+  useEffect(() => {
+    if (activeTab === 'browse') loadVehicles();
+    else if (activeTab === 'reservations' && isAuthenticated) loadReservations();
+    else if (activeTab === 'feedback' && isAuthenticated) loadFeedback();
+  }, [activeTab, isAuthenticated]);
+
+  // Load vehicles when filters change
+  useEffect(() => {
+    if (activeTab === 'browse') loadVehicles();
+  }, [filters.type, filters.location, filters.maxRate]);
+
+  useEffect(() => {
+    if (showFeedbackAnalyticsModal) {
+      loadFeedbackAnalytics();
+    }
+  }, [showFeedbackAnalyticsModal, analyticsFilters]);
+
+  // API Functions
   const loadVehicles = async () => {
     setLoading(true);
     setError(null);
     try {
-      const queryParams = new URLSearchParams();
-      if (filters.type) queryParams.append('type', filters.type);
-      if (filters.location) queryParams.append('location', filters.location);
-      if (filters.maxRate) queryParams.append('maxRate', filters.maxRate);
-      
-      const url = `${API_BASE_URL}/user/vehicles${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: apiHeaders
+      const params = new URLSearchParams();
+      if (filters.type) params.append('type', filters.type);
+      if (filters.location) params.append('location', filters.location);
+      if (filters.maxRate) params.append('maxRate', filters.maxRate);
+      params.append('includeReviews', 'true');
+
+      const response = await fetch(`${API_BASE_URL}/guest/vehicles?${params}`, {
+        headers: getApiHeaders(false)
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to load vehicles: ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error('Failed to load vehicles');
       const data = await response.json();
       setVehicles(data.vehicles || []);
     } catch (err) {
-      console.error('Error loading vehicles:', err);
-      setError('Failed to load available vehicles. Please try again.');
+      setError('Failed to load vehicles. Please try again.');
       setVehicles([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load user reservations from API
   const loadReservations = async () => {
+    if (!isAuthenticated) return;
     setLoading(true);
-    setError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/user/reservations`, {
-        method: 'GET',
-        headers: apiHeaders
+        headers: getApiHeaders(true)
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to load reservations: ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error('Failed to load reservations');
       const data = await response.json();
       setReservations(data.reservations || []);
     } catch (err) {
-      console.error('Error loading reservations:', err);
-      setError('Failed to load reservations. Please try again.');
-      setReservations([]);
+      setError('Failed to load reservations');
     } finally {
       setLoading(false);
     }
   };
 
-  // Load user feedback from API
   const loadFeedback = async () => {
+    if (!isAuthenticated) return;
     setLoading(true);
-    setError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/user/feedback`, {
-        method: 'GET',
-        headers: apiHeaders
+        headers: getApiHeaders(true)
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to load feedback: ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error('Failed to load feedback');
       const data = await response.json();
       setFeedback(data.feedback || []);
     } catch (err) {
-      console.error('Error loading feedback:', err);
-      setError('Failed to load feedback. Please try again.');
-      setFeedback([]);
+      setError('Failed to load feedback');
     } finally {
       setLoading(false);
     }
   };
 
-  // Create new reservation via API
   const createReservation = async (reservationData) => {
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/user/reservations`, {
         method: 'POST',
-        headers: apiHeaders,
+        headers: getApiHeaders(true),
         body: JSON.stringify(reservationData)
       });
-
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Failed to create reservation: ${response.statusText}`);
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create reservation');
       }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('Error creating reservation:', err);
-      throw err;
+      return await response.json();
     } finally {
       setLoading(false);
     }
   };
 
-  // Submit feedback via API
   const submitFeedback = async (feedbackData) => {
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/user/feedback`, {
         method: 'POST',
-        headers: apiHeaders,
+        headers: getApiHeaders(true),
         body: JSON.stringify(feedbackData)
       });
-
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Failed to submit feedback: ${response.statusText}`);
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to submit feedback');
       }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('Error submitting feedback:', err);
-      throw err;
+      return await response.json();
     } finally {
       setLoading(false);
     }
   };
 
-  // Cancel reservation via API
-  const cancelReservationAPI = async (reservationId) => {
+  const cancelReservation = async (reservationId) => {
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/user/reservations/${reservationId}`, {
         method: 'DELETE',
-        headers: apiHeaders
+        headers: getApiHeaders(true)
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Failed to cancel reservation: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('Error cancelling reservation:', err);
-      throw err;
+      if (!response.ok) throw new Error('Failed to cancel reservation');
+      return await response.json();
     } finally {
       setLoading(false);
     }
   };
 
-  // Complete/Return reservation via API
-  const completeReservationAPI = async (reservationId) => {
+  const completeReservation = async (reservationId) => {
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/user/reservations/${reservationId}`, {
         method: 'PUT',
-        headers: apiHeaders,
+        headers: getApiHeaders(true),
         body: JSON.stringify({ action: 'complete' })
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Failed to complete reservation: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('Error completing reservation:', err);
-      throw err;
+      if (!response.ok) throw new Error('Failed to complete reservation');
+      return await response.json();
     } finally {
       setLoading(false);
     }
   };
 
-  // Apply filters and reload vehicles
-  useEffect(() => {
-    if (activeTab === 'browse') {
-      loadVehicles();
-    }
-  }, [filters.type, filters.location, filters.maxRate]);
+  const loadFeedbackAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
 
-  const getVehicleIcon = (type) => {
-    switch (type) {
-      case 'anebike':
-        return <Bike className="w-6 h-6" />;
-      case 'gyroscooter':
-      case 'segway':
-        return <Car className="w-6 h-6" />;
-      default:
-        return <Car className="w-6 h-6" />;
-    }
-  };
+      const queryParams = new URLSearchParams();
+      Object.entries(analyticsFilters).forEach(([key, value]) => {
+        if (value) queryParams.append(key, value);
+      });
 
-  const getBatteryColor = (batteryLife) => {
-    if (batteryLife >= 80) return 'text-green-500';
-    if (batteryLife >= 60) return 'text-yellow-500';
-    if (batteryLife >= 40) return 'text-orange-500';
-    return 'text-red-500';
-  };
+      const response = await fetch(`${API_BASE_URL}/guest/feedback?${queryParams.toString()}`);
+      const data = await response.json();
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'confirmed':
-        return 'bg-blue-100 text-blue-800';
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      case 'active':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      setFeedbackAnalytics(data.feedback || []);
+      setAnalyticsData(data.analytics || null);
+    } catch (error) {
+      console.error('Error loading feedback analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
     }
   };
 
-  const getRatingColor = (rating) => {
-    if (rating >= 4) return 'text-green-500';
-    if (rating >= 3) return 'text-yellow-500';
-    return 'text-red-500';
-  };
+  // Event Handlers
+  const handleLogin = () => window.location.href = '/auth';
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const calculateDuration = (startDate, endDate) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const hours = Math.ceil((end - start) / (1000 * 60 * 60));
-    return hours;
-  };
-
-  const calculateCost = (vehicle, startDate, endDate, discountCode) => {
-    const hours = calculateDuration(startDate, endDate);
-    let total = hours * vehicle.hourlyRate;
-    
-    if (discountCode && discountCode.toUpperCase() === vehicle.discountCode && vehicle.discountPercentage > 0) {
-      const discount = total * (vehicle.discountPercentage / 100);
-      total -= discount;
-    }
-    
-    return { hours, total: Math.round(total * 100) / 100 };
+  const handleLogout = () => {
+    sessionStorage.removeItem('jwt');
+    setIsAuthenticated(false);
+    setActiveTab('browse');
+    setReservations([]);
+    setFeedback([]);
+    alert('Signed out successfully');
   };
 
   const handleReserveClick = (vehicle) => {
+    if (!isAuthenticated) {
+      alert('Please sign in to make a reservation');
+      handleLogin();
+      return;
+    }
     setSelectedVehicle(vehicle);
-    setReservationForm({
-      startDate: '',
-      endDate: '',
-      discountCode: '',
-      notes: ''
-    });
+    setReservationForm({ startDate: '', endDate: '', discountCode: '', notes: '' });
     setShowReservationModal(true);
   };
 
-  const handleFeedbackClick = (reservation) => {
-    setSelectedReservation(reservation);
-    setFeedbackForm({
-      rating: 5,
-      category: 'overall',
-      subject: '',
-      message: '',
-      wouldRecommend: true,
-      issues: []
+  const handleViewReviewsClick = async (vehicle) => {
+    // Reset filters and open feedback analytics modal
+    setAnalyticsFilters({
+      sentiment: '',
+      rating: '',
+      severity: ''
     });
-    setShowFeedbackModal(true);
+    setShowFeedbackAnalyticsModal(true);
   };
 
   const handleReservationSubmit = async () => {
@@ -343,7 +276,7 @@ const User = () => {
 
     const startDate = new Date(reservationForm.startDate);
     const endDate = new Date(reservationForm.endDate);
-    
+
     if (startDate >= endDate) {
       alert('End date must be after start date');
       return;
@@ -355,22 +288,18 @@ const User = () => {
     }
 
     try {
-      const reservationData = {
+      const result = await createReservation({
         vehicleId: selectedVehicle.vehicleId,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         discountCode: reservationForm.discountCode || undefined,
         notes: reservationForm.notes || undefined
-      };
-      
-      const result = await createReservation(reservationData);
-      
+      });
+
       if (result.success) {
         setShowReservationModal(false);
         setActiveTab('reservations');
         alert('Reservation created successfully!');
-      } else {
-        throw new Error(result.message || 'Failed to create reservation');
       }
     } catch (err) {
       alert(`Error creating reservation: ${err.message}`);
@@ -379,12 +308,12 @@ const User = () => {
 
   const handleFeedbackSubmit = async () => {
     if (!feedbackForm.subject.trim() || !feedbackForm.message.trim()) {
-      alert('Please provide both subject and detailed feedback message');
+      alert('Please provide both subject and message');
       return;
     }
 
     try {
-      const feedbackData = {
+      const result = await submitFeedback({
         reservationId: selectedReservation.reservationId,
         vehicleId: selectedReservation.vehicleId,
         vehicleType: selectedReservation.vehicleType,
@@ -395,94 +324,134 @@ const User = () => {
         message: feedbackForm.message.trim(),
         wouldRecommend: feedbackForm.wouldRecommend,
         issues: feedbackForm.issues
-      };
-      
-      const result = await submitFeedback(feedbackData);
-      
+      });
+
       if (result.success) {
         setShowFeedbackModal(false);
         setActiveTab('feedback');
-        alert('Feedback submitted successfully! Thank you for your input.');
-        await loadFeedback();
-      } else {
-        throw new Error(result.message || 'Failed to submit feedback');
+        alert('Feedback submitted successfully!');
+        loadFeedback();
       }
     } catch (err) {
       alert(`Error submitting feedback: ${err.message}`);
     }
   };
 
-  const handleCancelReservation = async (reservationId) => {
-    if (confirm('Are you sure you want to cancel this reservation?')) {
-      try {
-        const result = await cancelReservationAPI(reservationId);
-        
-        if (result.success) {
-          await loadReservations();
-          alert('Reservation cancelled successfully');
-        } else {
-          throw new Error(result.message || 'Failed to cancel reservation');
-        }
-      } catch (err) {
-        alert(`Error cancelling reservation: ${err.message}`);
-      }
+  // Utility Functions
+  const getVehicleIcon = (type) => {
+    return type === 'anebike' ? <Bike className="w-6 h-6" /> : <Car className="w-6 h-6" />;
+  };
+
+  const getBatteryColor = (level) => {
+    if (level >= 80) return 'text-green-500';
+    if (level >= 60) return 'text-yellow-500';
+    if (level >= 40) return 'text-orange-500';
+    return 'text-red-500';
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      confirmed: 'bg-blue-100 text-blue-800',
+      completed: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800',
+      active: 'bg-orange-100 text-orange-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  const calculateCost = (vehicle, startDate, endDate, discountCode) => {
+    const hours = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60));
+    let total = hours * vehicle.hourlyRate;
+
+    if (discountCode?.toUpperCase() === vehicle.discountCode && vehicle.discountPercentage > 0) {
+      total -= total * (vehicle.discountPercentage / 100);
     }
+
+    return { hours, total: Math.round(total * 100) / 100 };
   };
 
-  const handleCompleteReservation = async (reservationId) => {
-    if (confirm('Are you sure you want to return this vehicle?')) {
-      try {
-        const result = await completeReservationAPI(reservationId);
-        
-        if (result.success) {
-          await loadReservations();
-          alert('Vehicle returned successfully!');
-        } else {
-          throw new Error(result.message || 'Failed to complete reservation');
-        }
-      } catch (err) {
-        alert(`Error completing reservation: ${err.message}`);
-      }
-    }
-  };
-
-  const handleIssueToggle = (issue) => {
-    setFeedbackForm(prev => ({
-      ...prev,
-      issues: prev.issues.includes(issue) 
-        ? prev.issues.filter(i => i !== issue)
-        : [...prev.issues, issue]
-    }));
-  };
-
-  const getCompletedReservations = () => {
-    return reservations.filter(reservation => reservation.status === 'completed');
-  };
-
-  const getReservationsThatCanReceiveFeedback = () => {
-    const completedReservations = getCompletedReservations();
-    const feedbackReservationIds = feedback.map(f => f.reservationId);
-    return completedReservations.filter(res => !feedbackReservationIds.includes(res.reservationId));
-  };
-
-  const renderStars = (rating, interactive = false, onRatingChange = null) => {
+  const renderStars = (rating, interactive = false, onChange = null) => {
     return (
       <div className="flex space-x-1">
-        {[1, 2, 3, 4, 5].map((star) => (
+        {[1, 2, 3, 4, 5].map(star => (
           <Star
             key={star}
-            className={`w-5 h-5 ${
-              star <= rating 
-                ? 'text-yellow-400 fill-current' 
-                : 'text-gray-300'
-            } ${interactive ? 'cursor-pointer hover:text-yellow-400' : ''}`}
-            onClick={interactive ? () => onRatingChange(star) : undefined}
+            className={`w-5 h-5 ${star <= rating ? 'text-yellow-400 fill-current' : 'text-gray-300'} 
+              ${interactive ? 'cursor-pointer hover:text-yellow-400' : ''}`}
+            onClick={interactive ? () => onChange(star) : undefined}
           />
         ))}
       </div>
     );
   };
 
+  const renderReviewSummary = (summary) => {
+    if (!summary?.totalReviews) {
+      return <div className="bg-gray-50 rounded-lg p-3 text-center text-sm text-gray-500">No reviews yet</div>;
+    }
+
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            {renderStars(Math.round(summary.averageRating))}
+            <span className="font-medium">{summary.averageRating}</span>
+          </div>
+          <div className="text-right text-sm">
+            <p className="text-gray-600">{summary.totalReviews} reviews</p>
+            <p className="text-green-600">{summary.recommendationPercentage}% recommend</p>
+          </div>
+        </div>
+
+        {summary.commonIssues?.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-gray-700 mb-1">Common mentions:</p>
+            <div className="flex flex-wrap gap-1">
+              {summary.commonIssues.slice(0, 3).map((issue, idx) => (
+                <span key={idx} className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                  {issue.issue} ({issue.count})
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const getCompletedReservationsForFeedback = () => {
+    const completed = reservations.filter(r => r.status === 'completed');
+    const feedbackIds = feedback.map(f => f.reservationId);
+    return completed.filter(r => !feedbackIds.includes(r.reservationId));
+  };
+
+  const getSentimentBadge = (sentiment) => {
+    const colors = {
+      'POSITIVE': 'bg-green-100 text-green-800 border-green-300',
+      'NEGATIVE': 'bg-red-100 text-red-800 border-red-300',
+      'NEUTRAL': 'bg-gray-100 text-gray-800 border-gray-300',
+      'MIXED': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+    };
+    return colors[sentiment] || 'bg-gray-50 text-gray-600 border-gray-200';
+  };
+
+  const getSeverityBadge = (severity) => {
+    const colors = {
+      'HIGH': 'bg-red-100 text-red-700 border-red-300',
+      'MEDIUM': 'bg-yellow-100 text-yellow-700 border-yellow-300',
+      'LOW': 'bg-green-100 text-green-700 border-green-300',
+    };
+    return colors[severity] || 'bg-gray-100 text-gray-600 border-gray-200';
+  };
+
+  // Component Constants
   const feedbackCategories = [
     { value: 'overall', label: 'Overall Experience' },
     { value: 'vehicle_condition', label: 'Vehicle Condition' },
@@ -494,14 +463,9 @@ const User = () => {
   ];
 
   const commonIssues = [
-    'Battery died quickly',
-    'Vehicle was dirty',
-    'Mechanical problems',
-    'Uncomfortable ride',
-    'Poor GPS tracking',
-    'Difficulty finding vehicle',
-    'Charging issues',
-    'App problems'
+    'Battery died quickly', 'Vehicle was dirty', 'Mechanical problems',
+    'Uncomfortable ride', 'Poor GPS tracking', 'Difficulty finding vehicle',
+    'Charging issues', 'App problems'
   ];
 
   return (
@@ -510,43 +474,56 @@ const User = () => {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Car className="w-8 h-8 text-blue-600" />
-                <h1 className="text-xl font-bold text-gray-900">Dalscooter</h1>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Car className="w-8 h-8 text-blue-600" />
+              <h1 className="text-xl font-bold text-gray-900">Dalscooter</h1>
             </div>
+
             <nav className="flex space-x-8">
               <button
                 onClick={() => setActiveTab('browse')}
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'browse'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'browse' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Browse Vehicles
               </button>
-              <button
-                onClick={() => setActiveTab('reservations')}
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'reservations'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                My Reservations
-              </button>
-              <button
-                onClick={() => setActiveTab('feedback')}
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'feedback'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Feedback
-              </button>
+
+              {isAuthenticated && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('reservations')}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'reservations' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                  >
+                    My Reservations
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('feedback')}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'feedback' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                  >
+                    Feedback
+                  </button>
+                </>
+              )}
+
+              {isAuthenticated ? (
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 flex items-center space-x-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleLogin}
+                  className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In</span>
+                </button>
+              )}
             </nav>
           </div>
         </div>
@@ -571,14 +548,36 @@ const User = () => {
           </div>
         )}
 
+        {/* Browse Tab */}
         {activeTab === 'browse' && !loading && (
           <div>
-            {/* Search and Filters */}
+            {/* Auth Prompt for Guests */}
+            {!isAuthenticated && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="w-5 h-5 text-blue-600" />
+                    <span className="text-blue-800">
+                      <strong>Sign in to book vehicles</strong> - You can browse and read reviews without an account
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleLogin}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center space-x-2"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Sign In</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Filters */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Find Your Ride</h2>
                 <button
-                  onClick={() => setFilters({...filters, showFilters: !filters.showFilters})}
+                  onClick={() => setFilters({ ...filters, showFilters: !filters.showFilters })}
                   className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
                 >
                   <Filter className="w-4 h-4" />
@@ -587,13 +586,13 @@ const User = () => {
               </div>
 
               {filters.showFilters && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Type</label>
                     <select
                       value={filters.type}
-                      onChange={(e) => setFilters({...filters, type: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">All Types</option>
                       <option value="anebike">E-Bike</option>
@@ -606,9 +605,9 @@ const User = () => {
                     <input
                       type="text"
                       value={filters.location}
-                      onChange={(e) => setFilters({...filters, location: e.target.value})}
+                      onChange={(e) => setFilters({ ...filters, location: e.target.value })}
                       placeholder="Search location..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
@@ -616,9 +615,9 @@ const User = () => {
                     <input
                       type="number"
                       value={filters.maxRate}
-                      onChange={(e) => setFilters({...filters, maxRate: e.target.value})}
+                      onChange={(e) => setFilters({ ...filters, maxRate: e.target.value })}
                       placeholder="Enter max rate..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -627,9 +626,10 @@ const User = () => {
 
             {/* Vehicle Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {vehicles.map((vehicle) => (
+              {vehicles.map(vehicle => (
                 <div key={vehicle.vehicleId} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                   <div className="p-6">
+                    {/* Vehicle Header */}
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-3">
                         <div className="p-2 bg-blue-100 rounded-lg">
@@ -637,7 +637,9 @@ const User = () => {
                         </div>
                         <div>
                           <h3 className="font-semibold text-gray-900">{vehicle.model}</h3>
-                          <p className="text-sm text-gray-500 capitalize">{vehicle.vehicleType.replace('anebike', 'E-Bike')}</p>
+                          <p className="text-sm text-gray-500 capitalize">
+                            {vehicle.vehicleType.replace('anebike', 'E-Bike')}
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -646,6 +648,7 @@ const User = () => {
                       </div>
                     </div>
 
+                    {/* Vehicle Details */}
                     <div className="space-y-3 mb-4">
                       {vehicle.location && (
                         <div className="flex items-center space-x-2">
@@ -659,6 +662,53 @@ const User = () => {
                       </div>
                     </div>
 
+                    {/* Reviews */}
+                    {vehicle.reviewSummary && (
+                      <div className="mb-4">
+                        {renderReviewSummary(vehicle.reviewSummary)}
+                        {vehicle.reviewSummary.totalReviews > 0 && (
+                          <div className="mt-2 flex justify-between items-center">
+                            <button
+                              onClick={() => handleViewReviewsClick(vehicle)}
+                              className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>View Reviews</span>
+                            </button>
+                            <button
+                              onClick={() => setExpandedVehicles({ ...expandedVehicles, [vehicle.vehicleId]: !expandedVehicles[vehicle.vehicleId] })}
+                              className="text-sm text-gray-600 hover:text-gray-700 flex items-center space-x-1"
+                            >
+                              {expandedVehicles[vehicle.vehicleId] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              <span>{expandedVehicles[vehicle.vehicleId] ? 'Less' : 'Details'}</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Expanded Details */}
+                        {expandedVehicles[vehicle.vehicleId] && vehicle.reviewSummary.totalReviews > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-700 mb-2">Quick Stats</h4>
+                                <div className="space-y-1 text-sm text-gray-600">
+                                  <div className="flex items-center space-x-2">
+                                    <Users className="w-4 h-4" />
+                                    <span>{vehicle.reviewSummary.totalReviews} reviews</span>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <ThumbsUp className="w-4 h-4 text-green-500" />
+                                    <span>{vehicle.reviewSummary.recommendationPercentage}% recommend</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Discount */}
                     {vehicle.discountCode && vehicle.discountPercentage > 0 && (
                       <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
                         <div className="flex items-center space-x-2">
@@ -670,9 +720,10 @@ const User = () => {
                       </div>
                     )}
 
+                    {/* Features */}
                     {vehicle.features && (
                       <div className="grid grid-cols-2 gap-2 mb-4">
-                        {Object.entries(vehicle.features).filter(([key, value]) => value).map(([feature, _]) => (
+                        {Object.entries(vehicle.features).filter(([_, value]) => value).map(([feature]) => (
                           <div key={feature} className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
                             {feature.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                           </div>
@@ -680,18 +731,19 @@ const User = () => {
                       </div>
                     )}
 
+                    {/* Reserve Button */}
                     <button
                       onClick={() => handleReserveClick(vehicle)}
                       className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium"
-                      disabled={loading}
                     >
-                      {loading ? 'Loading...' : 'Reserve Now'}
+                      {isAuthenticated ? 'Reserve Now' : 'Sign In to Reserve'}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
 
+            {/* No Vehicles */}
             {vehicles.length === 0 && !loading && (
               <div className="text-center py-12">
                 <Car className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -708,13 +760,14 @@ const User = () => {
           </div>
         )}
 
-        {activeTab === 'reservations' && !loading && (
+        {/* Reservations Tab */}
+        {activeTab === 'reservations' && !loading && isAuthenticated && (
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">My Reservations</h2>
               <button
                 onClick={loadReservations}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Refresh
               </button>
@@ -727,14 +780,14 @@ const User = () => {
                 <p className="text-gray-600 mb-4">Start by browsing available vehicles and make your first reservation.</p>
                 <button
                   onClick={() => setActiveTab('browse')}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                 >
                   Browse Vehicles
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
-                {reservations.map((reservation) => (
+                {reservations.map(reservation => (
                   <div key={reservation.reservationId} className="bg-white rounded-lg shadow-sm border p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-4">
@@ -752,39 +805,60 @@ const User = () => {
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(reservation.status)}`}>
                           {reservation.status.charAt(0).toUpperCase() + reservation.status.slice(1)}
                         </span>
-                        
-                        {/* Return Vehicle Button - Simple, just for confirmed reservations */}
+
                         {reservation.status === 'confirmed' && (
-                          <button
-                            onClick={() => handleCompleteReservation(reservation.reservationId)}
-                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                            disabled={loading}
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            <span>Return Vehicle</span>
-                          </button>
+                          <>
+                            <button
+                              onClick={async () => {
+                                if (confirm('Are you sure you want to return this vehicle?')) {
+                                  try {
+                                    await completeReservation(reservation.reservationId);
+                                    loadReservations();
+                                    alert('Vehicle returned successfully!');
+                                  } catch (err) {
+                                    alert('Error returning vehicle: ' + err.message);
+                                  }
+                                }
+                              }}
+                              className="flex items-center space-x-1 px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Return Vehicle</span>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm('Are you sure you want to cancel this reservation?')) {
+                                  try {
+                                    await cancelReservation(reservation.reservationId);
+                                    loadReservations();
+                                    alert('Reservation cancelled successfully');
+                                  } catch (err) {
+                                    alert('Error cancelling reservation: ' + err.message);
+                                  }
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-800"
+                              title="Cancel Reservation"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
                         )}
-                        
-                        {/* Leave Feedback Button */}
+
                         {reservation.status === 'completed' && !feedback.some(f => f.reservationId === reservation.reservationId) && (
                           <button
-                            onClick={() => handleFeedbackClick(reservation)}
-                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                            onClick={() => {
+                              setSelectedReservation(reservation);
+                              setFeedbackForm({
+                                rating: 5, category: 'overall', subject: '', message: '',
+                                wouldRecommend: true, issues: []
+                              });
+                              setShowFeedbackModal(true);
+                            }}
+                            className="flex items-center space-x-1 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
                           >
                             <MessageSquare className="w-4 h-4" />
                             <span>Leave Feedback</span>
-                          </button>
-                        )}
-                        
-                        {/* Cancel Reservation Button */}
-                        {reservation.status === 'confirmed' && (
-                          <button
-                            onClick={() => handleCancelReservation(reservation.reservationId)}
-                            className="text-red-600 hover:text-red-800"
-                            disabled={loading}
-                            title="Cancel Reservation"
-                          >
-                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -807,9 +881,7 @@ const User = () => {
 
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                       <div className="flex items-center space-x-4">
-                        <span className="text-sm text-gray-600">
-                          ${reservation.hourlyRate}/hour
-                        </span>
+                        <span className="text-sm text-gray-600">${reservation.hourlyRate}/hour</span>
                         {reservation.discountPercentage > 0 && (
                           <span className="text-sm text-green-600 font-medium">
                             {reservation.discountPercentage}% discount applied
@@ -836,34 +908,32 @@ const User = () => {
           </div>
         )}
 
-        {activeTab === 'feedback' && !loading && (
+        {/* Feedback Tab */}
+        {activeTab === 'feedback' && !loading && isAuthenticated && (
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">My Feedback</h2>
               <div className="flex space-x-4">
-                {getReservationsThatCanReceiveFeedback().length > 0 && (
+                {getCompletedReservationsForFeedback().length > 0 && (
                   <span className="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">
-                    {getReservationsThatCanReceiveFeedback().length} rides awaiting feedback
+                    {getCompletedReservationsForFeedback().length} rides awaiting feedback
                   </span>
                 )}
-                <button
-                  onClick={loadFeedback}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                >
+                <button onClick={loadFeedback} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
                   Refresh
                 </button>
               </div>
             </div>
 
-            {/* Pending Feedback Section */}
-            {getReservationsThatCanReceiveFeedback().length > 0 && (
+            {/* Pending Feedback */}
+            {getCompletedReservationsForFeedback().length > 0 && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
                 <h3 className="text-lg font-semibold text-green-900 mb-4">
                   <MessageSquare className="w-5 h-5 inline mr-2" />
                   Completed Rides - Share Your Experience
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {getReservationsThatCanReceiveFeedback().map((reservation) => (
+                  {getCompletedReservationsForFeedback().map(reservation => (
                     <div key={reservation.reservationId} className="bg-white rounded-lg border p-4">
                       <div className="flex items-center space-x-3 mb-3">
                         <div className="p-2 bg-blue-100 rounded-lg">
@@ -875,8 +945,11 @@ const User = () => {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleFeedbackClick(reservation)}
-                        className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                        onClick={() => {
+                          setSelectedReservation(reservation);
+                          setShowFeedbackModal(true);
+                        }}
+                        className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 text-sm font-medium"
                       >
                         Leave Feedback
                       </button>
@@ -892,10 +965,10 @@ const User = () => {
                 <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No feedback submitted yet</h3>
                 <p className="text-gray-600 mb-4">Complete a ride to share your experience and help us improve our service.</p>
-                {getReservationsThatCanReceiveFeedback().length === 0 && (
+                {getCompletedReservationsForFeedback().length === 0 && (
                   <button
                     onClick={() => setActiveTab('browse')}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                   >
                     Browse Vehicles
                   </button>
@@ -903,32 +976,28 @@ const User = () => {
               </div>
             ) : (
               <div className="space-y-6">
-                {feedback.map((feedbackItem) => (
-                  <div key={feedbackItem.feedbackId} className="bg-white rounded-lg shadow-sm border p-6">
+                {feedback.map(item => (
+                  <div key={item.feedbackId} className="bg-white rounded-lg shadow-sm border p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-4">
                         <div className="p-2 bg-blue-100 rounded-lg">
-                          {getVehicleIcon(feedbackItem.vehicleType)}
+                          {getVehicleIcon(item.vehicleType)}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900">{feedbackItem.vehicleModel}</h3>
+                          <h3 className="font-semibold text-gray-900">{item.vehicleModel}</h3>
                           <p className="text-sm text-gray-500 capitalize">
-                            {feedbackItem.vehicleType.replace('anebike', 'E-Bike')}
+                            {item.vehicleType.replace('anebike', 'E-Bike')}
                           </p>
-                          <p className="text-xs text-gray-400">
-                            Submitted on {formatDate(feedbackItem.createdAt)}
-                          </p>
+                          <p className="text-xs text-gray-400">Submitted on {formatDate(item.createdAt)}</p>
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="flex items-center space-x-2 mb-2">
-                          {renderStars(feedbackItem.rating)}
-                          <span className={`text-sm font-medium ${getRatingColor(feedbackItem.rating)}`}>
-                            {feedbackItem.rating}/5
-                          </span>
+                          {renderStars(item.rating)}
+                          <span className="text-sm font-medium">{item.rating}/5</span>
                         </div>
                         <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                          {feedbackCategories.find(cat => cat.value === feedbackItem.category)?.label || feedbackItem.category}
+                          {feedbackCategories.find(cat => cat.value === item.category)?.label || item.category}
                         </span>
                       </div>
                     </div>
@@ -936,20 +1005,19 @@ const User = () => {
                     <div className="space-y-3">
                       <div>
                         <h4 className="text-sm font-medium text-gray-900 mb-1">Subject</h4>
-                        <p className="text-sm text-gray-700">{feedbackItem.subject}</p>
+                        <p className="text-sm text-gray-700">{item.subject}</p>
                       </div>
-                      
                       <div>
                         <h4 className="text-sm font-medium text-gray-900 mb-1">Feedback</h4>
-                        <p className="text-sm text-gray-700">{feedbackItem.message}</p>
+                        <p className="text-sm text-gray-700">{item.message}</p>
                       </div>
 
-                      {feedbackItem.issues && feedbackItem.issues.length > 0 && (
+                      {item.issues?.length > 0 && (
                         <div>
                           <h4 className="text-sm font-medium text-gray-900 mb-2">Issues Reported</h4>
                           <div className="flex flex-wrap gap-2">
-                            {feedbackItem.issues.map((issue, index) => (
-                              <span key={index} className="inline-flex items-center px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
+                            {item.issues.map((issue, idx) => (
+                              <span key={idx} className="inline-flex items-center px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
                                 {issue}
                               </span>
                             ))}
@@ -959,13 +1027,13 @@ const User = () => {
 
                       <div className="flex items-center space-x-4 pt-2 border-t border-gray-100">
                         <div className="flex items-center space-x-2">
-                          {feedbackItem.wouldRecommend ? (
+                          {item.wouldRecommend ? (
                             <ThumbsUp className="w-4 h-4 text-green-600" />
                           ) : (
                             <ThumbsDown className="w-4 h-4 text-red-600" />
                           )}
                           <span className="text-sm text-gray-600">
-                            {feedbackItem.wouldRecommend ? 'Would recommend' : 'Would not recommend'}
+                            {item.wouldRecommend ? 'Would recommend' : 'Would not recommend'}
                           </span>
                         </div>
                       </div>
@@ -976,19 +1044,217 @@ const User = () => {
             )}
           </div>
         )}
+
+        {/* Auth Required Message */}
+        {((activeTab === 'reservations' || activeTab === 'feedback') && !isAuthenticated) && (
+          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+            <LogIn className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Sign in required</h3>
+            <p className="text-gray-600 mb-4">
+              Please sign in to access {activeTab === 'reservations' ? 'your reservations' : 'feedback management'}.
+            </p>
+            <button
+              onClick={handleLogin}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center space-x-2 mx-auto"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Sign In</span>
+            </button>
+          </div>
+        )}
       </main>
 
+      {/* Reviews Modal */}
+      {/* Feedback Analytics Modal */}
+      {showFeedbackAnalyticsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Compact Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-gray-900">Customer Reviews</h3>
+                <button
+                  onClick={() => setShowFeedbackAnalyticsModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {analyticsLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-600">Loading reviews...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Quick Stats Bar */}
+                  {analyticsData && (
+                    <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4 mb-4">
+                      <div className="flex items-center space-x-6">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-gray-900">{analyticsData.totalAnalyzed}</p>
+                          <p className="text-xs text-gray-600">Total Reviews</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {analyticsData.sentimentDistribution?.percentages?.POSITIVE || 0}%
+                          </p>
+                          <p className="text-xs text-gray-600">Positive</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-red-600">
+                            {analyticsData.sentimentDistribution?.percentages?.NEGATIVE || 0}%
+                          </p>
+                          <p className="text-xs text-gray-600">Negative</p>
+                        </div>
+                      </div>
+
+                      {/* Compact Filters */}
+                      <div className="flex items-center space-x-3">
+                        <select
+                          value={analyticsFilters.sentiment}
+                          onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, sentiment: e.target.value })}
+                          className="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option value="">All Sentiments</option>
+                          <option value="POSITIVE">Positive</option>
+                          <option value="NEGATIVE">Negative</option>
+                          <option value="NEUTRAL">Neutral</option>
+                        </select>
+
+                        <select
+                          value={analyticsFilters.rating}
+                          onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, rating: e.target.value })}
+                          className="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option value="">All Ratings</option>
+                          <option value="5">5 Stars</option>
+                          <option value="4">4 Stars</option>
+                          <option value="3">3 Stars</option>
+                          <option value="2">2 Stars</option>
+                          <option value="1">1 Star</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reviews List - Main Focus */}
+                  <div className="space-y-4">
+                    {feedbackAnalytics.map((item) => (
+                      <div key={item.feedbackId} className="bg-white border rounded-lg p-5 hover:shadow-md transition-shadow">
+                        {/* Review Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 text-lg mb-1">{item.subject}</h4>
+                            <div className="flex items-center space-x-3 text-sm text-gray-600">
+                              <span>{item.vehicleType} - {item.vehicleModel}</span>
+                              <span>•</span>
+                              <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="flex text-yellow-400 text-lg">
+                              {'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}
+                            </div>
+                            <span className="text-sm font-medium text-gray-700">({item.rating}/5)</span>
+                          </div>
+                        </div>
+
+                        {/* Review Message */}
+                        <div className="mb-4">
+                          <p className="text-gray-800 leading-relaxed">{item.message}</p>
+                        </div>
+
+                        {/* Compact Sentiment Info */}
+                        <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-500">Sentiment:</span>
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${getSentimentBadge(item.sentimentAnalysis?.sentiment)}`}>
+                                {item.sentimentAnalysis?.sentiment || 'UNKNOWN'}
+                              </span>
+                            </div>
+
+                            {item.sentimentAnalysis?.emotions && item.sentimentAnalysis.emotions.length > 0 && (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-gray-500">Emotions:</span>
+                                <div className="flex space-x-1">
+                                  {item.sentimentAnalysis.emotions.slice(0, 2).map((emotion, idx) => {
+                                    const emotionName = typeof emotion === 'object' ? emotion.emotion : emotion;
+                                    return (
+                                      <span key={idx} className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">
+                                        {emotionName}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-3">
+                            {item.sentimentAnalysis?.severity && (
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${getSeverityBadge(item.sentimentAnalysis.severity)}`}>
+                                {item.sentimentAnalysis.severity} Priority
+                              </span>
+                            )}
+
+                            <div className="flex items-center space-x-1">
+                              {item.wouldRecommend ? (
+                                <ThumbsUp className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <ThumbsDown className="w-4 h-4 text-red-600" />
+                              )}
+                              <span className="text-xs text-gray-600">
+                                {item.wouldRecommend ? 'Recommends' : 'Not recommended'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Issues (if any) */}
+                        {(item.issues || []).length > 0 && (
+                          <div className="mt-3">
+                            <div className="flex flex-wrap gap-2">
+                              {item.issues.slice(0, 3).map((issue, idx) => (
+                                <span key={idx} className="inline-flex items-center px-2 py-1 text-xs bg-red-50 text-red-700 rounded">
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  {issue}
+                                </span>
+                              ))}
+                              {item.issues.length > 3 && (
+                                <span className="text-xs text-gray-500">+{item.issues.length - 3} more</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {feedbackAnalytics.length === 0 && (
+                      <div className="text-center py-16">
+                        <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                        <h4 className="text-xl text-gray-900 mb-2">No reviews found</h4>
+                        <p className="text-gray-600">Try adjusting your filters or check back later for new reviews.</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Reservation Modal */}
-      {showReservationModal && selectedVehicle && (
+      {showReservationModal && selectedVehicle && isAuthenticated && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Reserve Vehicle</h3>
-                <button
-                  onClick={() => setShowReservationModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+                <button onClick={() => setShowReservationModal(false)} className="text-gray-400 hover:text-gray-600">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -1003,7 +1269,7 @@ const User = () => {
                     <p className="text-sm text-gray-500">${selectedVehicle.hourlyRate}/hour</p>
                   </div>
                 </div>
-                {selectedVehicle.discountCode && selectedVehicle.discountPercentage > 0 && (
+                {selectedVehicle.discountCode && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <p className="text-sm text-green-800">
                       Use code "{selectedVehicle.discountCode}" for {selectedVehicle.discountPercentage}% off
@@ -1018,9 +1284,9 @@ const User = () => {
                   <input
                     type="datetime-local"
                     value={reservationForm.startDate}
-                    onChange={(e) => setReservationForm({...reservationForm, startDate: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, startDate: e.target.value })}
                     min={new Date().toISOString().slice(0, 16)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -1029,9 +1295,9 @@ const User = () => {
                   <input
                     type="datetime-local"
                     value={reservationForm.endDate}
-                    onChange={(e) => setReservationForm({...reservationForm, endDate: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, endDate: e.target.value })}
                     min={reservationForm.startDate || new Date().toISOString().slice(0, 16)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -1040,9 +1306,9 @@ const User = () => {
                   <input
                     type="text"
                     value={reservationForm.discountCode}
-                    onChange={(e) => setReservationForm({...reservationForm, discountCode: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, discountCode: e.target.value })}
                     placeholder="Enter discount code..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -1050,10 +1316,10 @@ const User = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
                   <textarea
                     value={reservationForm.notes}
-                    onChange={(e) => setReservationForm({...reservationForm, notes: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, notes: e.target.value })}
                     rows={3}
-                    placeholder="Any special requirements or notes..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Any special requirements..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -1074,14 +1340,13 @@ const User = () => {
                 <div className="flex space-x-3 pt-4">
                   <button
                     onClick={() => setShowReservationModal(false)}
-                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                    disabled={loading}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleReservationSubmit}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                     disabled={loading}
                   >
                     {loading ? 'Creating...' : 'Confirm Reservation'}
@@ -1094,22 +1359,19 @@ const User = () => {
       )}
 
       {/* Feedback Modal */}
-      {showFeedbackModal && selectedReservation && (
+      {showFeedbackModal && selectedReservation && isAuthenticated && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Share Your Experience</h3>
-                <button
-                  onClick={() => setShowFeedbackModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+                <button onClick={() => setShowFeedbackModal(false)} className="text-gray-400 hover:text-gray-600">
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               <div className="mb-6">
-                <div className="flex items-center space-x-3 mb-3">
+                <div className="flex items-center space-x-3">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     {getVehicleIcon(selectedReservation.vehicleType)}
                   </div>
@@ -1123,30 +1385,21 @@ const User = () => {
               </div>
 
               <div className="space-y-6">
-                {/* Rating */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">Overall Rating</label>
                   <div className="flex items-center space-x-3">
-                    {renderStars(feedbackForm.rating, true, (rating) => 
-                      setFeedbackForm({...feedbackForm, rating})
-                    )}
+                    {renderStars(feedbackForm.rating, true, (rating) => setFeedbackForm({ ...feedbackForm, rating }))}
                     <span className="text-sm text-gray-600">
-                      {feedbackForm.rating === 1 && 'Poor'}
-                      {feedbackForm.rating === 2 && 'Fair'}
-                      {feedbackForm.rating === 3 && 'Good'}
-                      {feedbackForm.rating === 4 && 'Very Good'}
-                      {feedbackForm.rating === 5 && 'Excellent'}
+                      {['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][feedbackForm.rating - 1]}
                     </span>
                   </div>
                 </div>
-
-                {/* Category */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Feedback Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                   <select
                     value={feedbackForm.category}
-                    onChange={(e) => setFeedbackForm({...feedbackForm, category: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setFeedbackForm({ ...feedbackForm, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   >
                     {feedbackCategories.map(category => (
                       <option key={category.value} value={category.value}>
@@ -1156,42 +1409,44 @@ const User = () => {
                   </select>
                 </div>
 
-                {/* Subject */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
                   <input
                     type="text"
                     value={feedbackForm.subject}
-                    onChange={(e) => setFeedbackForm({...feedbackForm, subject: e.target.value})}
+                    onChange={(e) => setFeedbackForm({ ...feedbackForm, subject: e.target.value })}
                     placeholder="Brief summary of your experience..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* Message */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Detailed Feedback</label>
                   <textarea
                     value={feedbackForm.message}
-                    onChange={(e) => setFeedbackForm({...feedbackForm, message: e.target.value})}
+                    onChange={(e) => setFeedbackForm({ ...feedbackForm, message: e.target.value })}
                     rows={4}
-                    placeholder="Tell us about your experience with this vehicle..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Tell us about your experience..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* Issues */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Any Issues? (Select all that apply)
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {commonIssues.map((issue) => (
+                    {commonIssues.map(issue => (
                       <label key={issue} className="flex items-center space-x-2 text-sm">
                         <input
                           type="checkbox"
                           checked={feedbackForm.issues.includes(issue)}
-                          onChange={() => handleIssueToggle(issue)}
+                          onChange={() => {
+                            const newIssues = feedbackForm.issues.includes(issue)
+                              ? feedbackForm.issues.filter(i => i !== issue)
+                              : [...feedbackForm.issues, issue];
+                            setFeedbackForm({ ...feedbackForm, issues: newIssues });
+                          }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                         <span className="text-gray-700">{issue}</span>
@@ -1200,7 +1455,6 @@ const User = () => {
                   </div>
                 </div>
 
-                {/* Recommendation */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Would you recommend this vehicle to others?
@@ -1211,7 +1465,7 @@ const User = () => {
                         type="radio"
                         name="recommend"
                         checked={feedbackForm.wouldRecommend === true}
-                        onChange={() => setFeedbackForm({...feedbackForm, wouldRecommend: true})}
+                        onChange={() => setFeedbackForm({ ...feedbackForm, wouldRecommend: true })}
                         className="text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-sm text-gray-700">Yes</span>
@@ -1221,7 +1475,7 @@ const User = () => {
                         type="radio"
                         name="recommend"
                         checked={feedbackForm.wouldRecommend === false}
-                        onChange={() => setFeedbackForm({...feedbackForm, wouldRecommend: false})}
+                        onChange={() => setFeedbackForm({ ...feedbackForm, wouldRecommend: false })}
                         className="text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-sm text-gray-700">No</span>
@@ -1232,14 +1486,13 @@ const User = () => {
                 <div className="flex space-x-3 pt-4">
                   <button
                     onClick={() => setShowFeedbackModal(false)}
-                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                    disabled={loading}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleFeedbackSubmit}
-                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center justify-center space-x-2"
                     disabled={loading || !feedbackForm.subject.trim() || !feedbackForm.message.trim()}
                   >
                     <Send className="w-4 h-4" />

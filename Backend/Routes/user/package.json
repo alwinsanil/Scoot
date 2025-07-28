@@ -1,5 +1,8 @@
 {
   "dependencies": {
-    "aws-sdk": "^2.1692.0"
+    "aws-sdk": "^2.1692.0",
+    "natural": "^8.1.0",
+    "sentiment": "^5.0.2",
+    "vader-sentiment": "^1.1.3"
   }
 }
