@@ -143,9 +143,6 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
         case 'feedback':
             return await handleFeedbackEndpoint(method, resourceId, queryParams, body, userInfo);
         
-        case 'rides':
-            return await handleRideEndpoint(method, resourceId, queryParams, body, userInfo);
-        
         case 'profile':
             return await handleProfileEndpoint(method, resourceId, queryParams, body, userInfo);
         
@@ -259,35 +256,10 @@ async function handleAnalyticsEndpoint(method, resourceId, queryParams, body, us
         case 'GET':
             if (resourceId === 'feedback') {
                 return await getUserFeedbackAnalytics(userInfo, queryParams);
-            } else {
-                return await getPersonalAnalytics(userInfo, queryParams);
-            }
+            } 
         
         default:
             throw { statusCode: 405, message: `Method ${method} not allowed for analytics endpoint` };
-    }
-}
-
-async function handleRideEndpoint(method, rideId, queryParams, body, userInfo) {
-    switch (method) {
-        case 'GET':
-            if (rideId) {
-                return await getRide(rideId, userInfo);
-            } else {
-                return await getUserRides(userInfo, queryParams);
-            }
-        
-        case 'POST':
-            return await startRide(body, userInfo);
-        
-        case 'PUT':
-            if (!rideId) {
-                throw { statusCode: 400, message: 'Ride ID is required for updates' };
-            }
-            return await updateRide(rideId, body, userInfo);
-        
-        default:
-            throw { statusCode: 405, message: `Method ${method} not allowed for rides endpoint` };
     }
 }
 
@@ -295,9 +267,6 @@ async function handleProfileEndpoint(method, resourceId, queryParams, body, user
     switch (method) {
         case 'GET':
             return await getUserProfile(userInfo);
-        
-        case 'PUT':
-            return await updateUserProfile(body, userInfo);
         
         default:
             throw { statusCode: 405, message: `Method ${method} not allowed for profile endpoint` };
@@ -1046,386 +1015,14 @@ async function getUserFeedbackAnalytics(userInfo, queryParams) {
     
     const analytics = await feedbackService.getFeedbackAnalytics(filters);
     
-    // Add personal insights
-    const personalInsights = generatePersonalInsights(feedback);
-    
     return {
         success: true,
         analytics: {
             ...analytics,
             personalInsights: personalInsights,
             feedbackHistory: feedback.slice(0, 5), // Last 5 feedback items
-            improvementSuggestions: generateImprovementSuggestions(feedback)
         },
         message: 'Personal feedback analytics retrieved successfully'
-    };
-}
-
-async function getPersonalAnalytics(userInfo, queryParams) {
-    console.log('Getting comprehensive personal analytics for user:', userInfo.userId);
-    
-    // Get user's reservations and feedback
-    const reservations = await getUserReservations(userInfo, {});
-    const feedbackData = await getUserFeedback(userInfo, {});
-    
-    const personalAnalytics = {
-        userId: userInfo.userId,
-        userEmail: userInfo.email,
-        summary: {
-            totalReservations: reservations.reservations.length,
-            completedReservations: reservations.reservations.filter(r => r.status === 'completed').length,
-            cancelledReservations: reservations.reservations.filter(r => r.status === 'cancelled').length,
-            totalFeedback: feedbackData.feedback.length,
-            averageRating: feedbackData.summary.averageRating,
-            memberSince: userInfo.registrationDate || reservations.reservations[reservations.reservations.length - 1]?.createdAt || null
-        },
-        reservationAnalytics: analyzeUserReservations(reservations.reservations),
-        feedbackAnalytics: feedbackData.summary,
-        behaviorInsights: generateBehaviorInsights(reservations.reservations, feedbackData.feedback),
-        recommendations: generateUserRecommendations(reservations.reservations, feedbackData.feedback)
-    };
-    
-    return {
-        success: true,
-        analytics: personalAnalytics,
-        message: 'Comprehensive personal analytics retrieved successfully'
-    };
-}
-
-// Helper Functions for Analytics
-function generatePersonalInsights(feedback) {
-    const insights = [];
-    
-    if (feedback.length === 0) return insights;
-    
-    // Average rating trend
-    const avgRating = feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length;
-    if (avgRating >= 4.5) {
-        insights.push({
-            type: 'positive',
-            message: 'You consistently provide high ratings, indicating great satisfaction with our services',
-            icon: '😊'
-        });
-    } else if (avgRating <= 2.5) {
-        insights.push({
-            type: 'attention',
-            message: 'Your ratings suggest some concerns. We\'d love to improve your experience',
-            icon: '🤔'
-        });
-    }
-    
-    // Sentiment consistency
-    const sentiments = feedback.filter(f => f.sentiment).map(f => f.sentiment);
-    if (sentiments.length > 0) {
-        const positiveFeedback = sentiments.filter(s => s === 'positive').length;
-        const negativeFeedback = sentiments.filter(s => s === 'negative').length;
-        
-        if (positiveFeedback > negativeFeedback * 2) {
-            insights.push({
-                type: 'positive',
-                message: 'Your feedback shows consistently positive experiences',
-                icon: '👍'
-            });
-        } else if (negativeFeedback > positiveFeedback) {
-            insights.push({
-                type: 'improvement',
-                message: 'We notice some negative experiences. Let us know how we can improve',
-                icon: '💡'
-            });
-        }
-    }
-    
-    // Feedback frequency
-    if (feedback.length >= 5) {
-        insights.push({
-            type: 'engagement',
-            message: 'Thank you for being an active community member with valuable feedback',
-            icon: '🌟'
-        });
-    }
-    
-    // Recent feedback patterns
-    const recentFeedback = feedback.slice(0, 3);
-    if (recentFeedback.length >= 2) {
-        const recentAvg = recentFeedback.reduce((sum, f) => sum + f.rating, 0) / recentFeedback.length;
-        const overallAvg = avgRating;
-        
-        if (recentAvg > overallAvg + 0.5) {
-            insights.push({
-                type: 'trending',
-                message: 'Your recent experiences show improvement - great to see!',
-                icon: '📈'
-            });
-        } else if (recentAvg < overallAvg - 0.5) {
-            insights.push({
-                type: 'attention',
-                message: 'Your recent ratings are lower than usual. We\'re here to help',
-                icon: '📉'
-            });
-        }
-    }
-    
-    return insights;
-}
-
-function generateImprovementSuggestions(feedback) {
-    const suggestions = [];
-    
-    if (feedback.length === 0) return suggestions;
-    
-    // Analyze common categories mentioned
-    const allCategories = feedback.reduce((acc, f) => {
-        if (f.categories) {
-            Object.keys(f.categories).forEach(cat => {
-                acc[cat] = (acc[cat] || 0) + 1;
-            });
-        }
-        return acc;
-    }, {});
-    
-    // Generate suggestions based on frequent categories in negative feedback
-    const negativeFeedback = feedback.filter(f => f.sentiment === 'negative' || f.rating <= 2);
-    
-    if (negativeFeedback.length > 0) {
-        const negativeCategories = negativeFeedback.reduce((acc, f) => {
-            if (f.categories) {
-                Object.keys(f.categories).forEach(cat => {
-                    acc[cat] = (acc[cat] || 0) + 1;
-                });
-            }
-            return acc;
-        }, {});
-        
-        Object.entries(negativeCategories).forEach(([category, count]) => {
-            if (count >= 2) {
-                switch (category) {
-                    case 'vehicle_condition':
-                        suggestions.push({
-                            category: 'Vehicle Quality',
-                            suggestion: 'Consider reporting vehicle condition issues immediately to help us maintain our fleet',
-                            priority: 'high'
-                        });
-                        break;
-                    case 'service_quality':
-                        suggestions.push({
-                            category: 'Service Experience',
-                            suggestion: 'Contact our customer service team to discuss service quality concerns',
-                            priority: 'high'
-                        });
-                        break;
-                    case 'booking':
-                        suggestions.push({
-                            category: 'Booking Process',
-                            suggestion: 'Try our mobile app for a smoother booking experience',
-                            priority: 'medium'
-                        });
-                        break;
-                }
-            }
-        });
-    }
-    
-    // General suggestions based on feedback patterns
-    if (feedback.some(f => f.rating >= 4)) {
-        suggestions.push({
-            category: 'Loyalty Rewards',
-            suggestion: 'You\'ve provided great feedback! Check if you\'re eligible for our loyalty program',
-            priority: 'low'
-        });
-    }
-    
-    return suggestions;
-}
-
-function analyzeUserReservations(reservations) {
-    if (reservations.length === 0) {
-        return { message: 'No reservation data available' };
-    }
-    
-    const completed = reservations.filter(r => r.status === 'completed');
-    const cancelled = reservations.filter(r => r.status === 'cancelled');
-    
-    // Calculate usage patterns
-    const vehicleTypes = reservations.reduce((acc, r) => {
-        acc[r.vehicleType] = (acc[r.vehicleType] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const totalCost = completed.reduce((sum, r) => sum + (r.totalCost || 0), 0);
-    const totalHours = completed.reduce((sum, r) => sum + (r.durationHours || 0), 0);
-    
-    // Calculate booking patterns
-    const bookingDays = reservations.map(r => new Date(r.startDate).getDay());
-    const dayOfWeekCounts = bookingDays.reduce((acc, day) => {
-        acc[day] = (acc[day] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const preferredDay = Object.entries(dayOfWeekCounts)
-        .sort(([,a], [,b]) => b - a)[0];
-    
-    return {
-        totalReservations: reservations.length,
-        completionRate: reservations.length > 0 ? (completed.length / reservations.length * 100).toFixed(1) : 0,
-        cancellationRate: reservations.length > 0 ? (cancelled.length / reservations.length * 100).toFixed(1) : 0,
-        totalSpent: totalCost.toFixed(2),
-        totalHoursUsed: totalHours,
-        averageDuration: completed.length > 0 ? (totalHours / completed.length).toFixed(1) : 0,
-        preferredVehicleTypes: Object.entries(vehicleTypes)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 3)
-            .map(([type, count]) => ({ type, count })),
-        preferredBookingDay: preferredDay ? {
-            day: dayNames[parseInt(preferredDay[0])],
-            count: preferredDay[1]
-        } : null,
-        recentActivity: reservations.slice(0, 5)
-    };
-}
-
-function generateBehaviorInsights(reservations, feedback) {
-    const insights = [];
-    
-    // Loyalty analysis
-    if (reservations.length >= 10) {
-        insights.push({
-            type: 'loyalty',
-            title: 'Loyal Customer',
-            description: 'You\'re one of our valued repeat customers',
-            score: 'high'
-        });
-    }
-    
-    // Feedback engagement
-    const feedbackRate = reservations.length > 0 ? (feedback.length / reservations.filter(r => r.status === 'completed').length) : 0;
-    if (feedbackRate >= 0.8) {
-        insights.push({
-            type: 'engagement',
-            title: 'Highly Engaged',
-            description: 'You consistently provide feedback, helping us improve',
-            score: 'high'
-        });
-    }
-    
-    // Usage patterns
-    const recentReservations = reservations.filter(r => {
-        const reservationDate = new Date(r.createdAt);
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        return reservationDate >= thirtyDaysAgo;
-    });
-    
-    if (recentReservations.length >= 3) {
-        insights.push({
-            type: 'activity',
-            title: 'Active User',
-            description: 'High activity in the last 30 days',
-            score: 'high'
-        });
-    } else if (recentReservations.length === 0 && reservations.length > 0) {
-        insights.push({
-            type: 'retention',
-            title: 'We Miss You',
-            description: 'No recent activity - special offers might be available',
-            score: 'attention'
-        });
-    }
-    
-    return insights;
-}
-
-function generateUserRecommendations(reservations, feedback) {
-    const recommendations = [];
-    
-    // Based on vehicle preferences
-    const vehicleTypes = reservations.reduce((acc, r) => {
-        acc[r.vehicleType] = (acc[r.vehicleType] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const mostUsedVehicle = Object.entries(vehicleTypes)
-        .sort(([,a], [,b]) => b - a)[0];
-    
-    if (mostUsedVehicle) {
-        recommendations.push({
-            type: 'vehicle',
-            title: `More ${mostUsedVehicle[0]} Options`,
-            description: `Since you prefer ${mostUsedVehicle[0]}s, check out our latest models in this category`,
-            priority: 'medium'
-        });
-    }
-    
-    // Based on feedback patterns
-    const highRatingFeedback = feedback.filter(f => f.rating >= 4);
-    if (highRatingFeedback.length >= 3) {
-        recommendations.push({
-            type: 'loyalty',
-            title: 'VIP Program Eligible',
-            description: 'Your consistent positive feedback makes you eligible for our VIP program',
-            priority: 'high'
-        });
-    }
-    
-    // Based on usage frequency
-    if (reservations.length >= 5) {
-        recommendations.push({
-            type: 'subscription',
-            title: 'Consider Our Subscription Plan',
-            description: 'Based on your usage patterns, a subscription might save you money',
-            priority: 'medium'
-        });
-    }
-    
-    // Based on booking patterns
-    const weekendBookings = reservations.filter(r => {
-        const day = new Date(r.startDate).getDay();
-        return day === 0 || day === 6; // Sunday or Saturday
-    });
-    
-    if (weekendBookings.length >= 3) {
-        recommendations.push({
-            type: 'scheduling',
-            title: 'Weekend Early Bird Discounts',
-            description: 'Book weekend trips early to get the best rates',
-            priority: 'low'
-        });
-    }
-    
-    return recommendations;
-}
-
-// Ride-related functions (basic implementation)
-async function startRide(rideData, userInfo) {
-    // Basic implementation - you can expand this
-    return {
-        success: true,
-        message: 'Ride functionality not yet implemented',
-        note: 'This would start a ride from an active reservation'
-    };
-}
-
-async function getUserRides(userInfo, queryParams) {
-    // Basic implementation - you can expand this
-    return {
-        success: true,
-        rides: [],
-        message: 'Ride history functionality not yet implemented'
-    };
-}
-
-async function getRide(rideId, userInfo) {
-    // Basic implementation - you can expand this
-    return {
-        success: true,
-        message: 'Ride details functionality not yet implemented'
-    };
-}
-
-async function updateRide(rideId, updateData, userInfo) {
-    // Basic implementation - you can expand this
-    return {
-        success: true,
-        message: 'Ride update functionality not yet implemented'
     };
 }
 
@@ -1457,33 +1054,6 @@ async function getUserProfile(userInfo) {
             }
         },
         message: 'Profile retrieved successfully'
-    };
-}
-
-async function updateUserProfile(profileData, userInfo) {
-    // Basic implementation - you can expand this to update user preferences
-    const allowedUpdates = ['preferences', 'displayName', 'phoneNumber'];
-    const updates = {};
-    
-    for (const field of allowedUpdates) {
-        if (profileData[field] !== undefined) {
-            updates[field] = profileData[field];
-        }
-    }
-    
-    if (Object.keys(updates).length === 0) {
-        throw { statusCode: 400, message: 'No valid fields to update' };
-    }
-    
-    // Here you would typically update a user profile table
-    // For now, return the updated preferences
-    
-    return {
-        success: true,
-        message: 'Profile updated successfully',
-        updatedFields: Object.keys(updates),
-        updates: updates,
-        note: 'Profile updates saved to user preferences'
     };
 }
 
@@ -1543,10 +1113,6 @@ async function checkExistingFeedback(reservationId, userId) {
 
 function generateReservationId() {
     return 'reservation_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
-}
-
-function generateFeedbackId() {
-    return 'feedback_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
 }
 
 function getCorsHeaders() {

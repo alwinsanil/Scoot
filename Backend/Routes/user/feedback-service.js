@@ -318,30 +318,6 @@ class FeedbackService {
         return detectedIssues;
     }
 
-    mapEmotionsFromSentiment(sentiment, score) {
-        // Simple emotion mapping based on sentiment
-        const emotions = [];
-        
-        switch (sentiment) {
-            case 'POSITIVE':
-                if (score > 0.8) emotions.push('joy', 'satisfaction');
-                else emotions.push('contentment');
-                break;
-            case 'NEGATIVE':
-                if (score > 0.8) emotions.push('anger', 'frustration');
-                else emotions.push('disappointment');
-                break;
-            case 'NEUTRAL':
-                emotions.push('neutral');
-                break;
-            case 'MIXED':
-                emotions.push('ambivalent');
-                break;
-        }
-        
-        return emotions;
-    }
-
     getFallbackSentiment(subject, message) {
         // Enhanced keyword-based fallback analysis
         const text = `${subject} ${message}`.toLowerCase();
@@ -411,7 +387,6 @@ class FeedbackService {
                 mixed: sentiment === 'MIXED' ? score : 0.1
             },
             keyPhrases: [],
-            emotions: this.mapEmotionsFromSentiment(sentiment, score),
             detectedIssues: [],
             analysisBreakdown: {
                 method: 'fallback_keyword_analysis',
