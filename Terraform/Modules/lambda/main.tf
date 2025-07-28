@@ -84,7 +84,7 @@ resource "aws_lambda_function" "user_api" {
   handler       = "user-api.lambdaHandler"
   runtime       = "nodejs18.x"
   timeout       = 30
-  memory_size   = 128
+  memory_size   = 1024
 
   source_code_hash = filebase64sha256("${path.module}/user-api.zip")
 
