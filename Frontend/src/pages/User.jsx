@@ -8,20 +8,26 @@ const User = () => {
   const [vehicles, setVehicles] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [feedback, setFeedback] = useState([]);
-  const [vehicleReviews, setVehicleReviews] = useState({});
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+  const [feedbackAnalytics, setFeedbackAnalytics] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    sentiment: '',
+    rating: '',
+    severity: ''
+  });
+
   // Modal states
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [showReviewsModal, setShowReviewsModal] = useState(false);
-  
+  const [showFeedbackAnalyticsModal, setShowFeedbackAnalyticsModal] = useState(false);
+
   // Selected items
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [selectedReservation, setSelectedReservation] = useState(null);
-  const [selectedVehicleForReviews, setSelectedVehicleForReviews] = useState(null);
   const [expandedVehicles, setExpandedVehicles] = useState({});
 
   // Form states
@@ -50,7 +56,7 @@ const User = () => {
 
   // API Configuration
   const API_BASE_URL = `${redirectBaseUri}/dev`;
-  
+
   const getApiHeaders = (requireAuth = false) => {
     const headers = { 'Content-Type': 'application/json' };
     if (requireAuth) {
@@ -77,6 +83,12 @@ const User = () => {
     if (activeTab === 'browse') loadVehicles();
   }, [filters.type, filters.location, filters.maxRate]);
 
+  useEffect(() => {
+    if (showFeedbackAnalyticsModal) {
+      loadFeedbackAnalytics();
+    }
+  }, [showFeedbackAnalyticsModal, analyticsFilters]);
+
   // API Functions
   const loadVehicles = async () => {
     setLoading(true);
@@ -87,11 +99,11 @@ const User = () => {
       if (filters.location) params.append('location', filters.location);
       if (filters.maxRate) params.append('maxRate', filters.maxRate);
       params.append('includeReviews', 'true');
-      
+
       const response = await fetch(`${API_BASE_URL}/guest/vehicles?${params}`, {
         headers: getApiHeaders(false)
       });
-      
+
       if (!response.ok) throw new Error('Failed to load vehicles');
       const data = await response.json();
       setVehicles(data.vehicles || []);
@@ -100,18 +112,6 @@ const User = () => {
       setVehicles([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadVehicleReviews = async (vehicleId) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/guest/vehicles/${vehicleId}/reviews?limit=10`, {
-        headers: getApiHeaders(false)
-      });
-      if (!response.ok) throw new Error('Failed to load reviews');
-      return await response.json();
-    } catch (err) {
-      throw err;
     }
   };
 
@@ -214,9 +214,30 @@ const User = () => {
     }
   };
 
+  const loadFeedbackAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+
+      const queryParams = new URLSearchParams();
+      Object.entries(analyticsFilters).forEach(([key, value]) => {
+        if (value) queryParams.append(key, value);
+      });
+
+      const response = await fetch(`${API_BASE_URL}/guest/feedback?${queryParams.toString()}`);
+      const data = await response.json();
+
+      setFeedbackAnalytics(data.feedback || []);
+      setAnalyticsData(data.analytics || null);
+    } catch (error) {
+      console.error('Error loading feedback analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   // Event Handlers
   const handleLogin = () => window.location.href = '/auth';
-  
+
   const handleLogout = () => {
     sessionStorage.removeItem('jwt');
     setIsAuthenticated(false);
@@ -238,14 +259,13 @@ const User = () => {
   };
 
   const handleViewReviewsClick = async (vehicle) => {
-    try {
-      setSelectedVehicleForReviews(vehicle);
-      setShowReviewsModal(true);
-      const reviewsData = await loadVehicleReviews(vehicle.vehicleId);
-      setVehicleReviews({ ...vehicleReviews, [vehicle.vehicleId]: reviewsData });
-    } catch (err) {
-      alert('Failed to load reviews');
-    }
+    // Reset filters and open feedback analytics modal
+    setAnalyticsFilters({
+      sentiment: '',
+      rating: '',
+      severity: ''
+    });
+    setShowFeedbackAnalyticsModal(true);
   };
 
   const handleReservationSubmit = async () => {
@@ -256,7 +276,7 @@ const User = () => {
 
     const startDate = new Date(reservationForm.startDate);
     const endDate = new Date(reservationForm.endDate);
-    
+
     if (startDate >= endDate) {
       alert('End date must be after start date');
       return;
@@ -275,7 +295,7 @@ const User = () => {
         discountCode: reservationForm.discountCode || undefined,
         notes: reservationForm.notes || undefined
       });
-      
+
       if (result.success) {
         setShowReservationModal(false);
         setActiveTab('reservations');
@@ -305,7 +325,7 @@ const User = () => {
         wouldRecommend: feedbackForm.wouldRecommend,
         issues: feedbackForm.issues
       });
-      
+
       if (result.success) {
         setShowFeedbackModal(false);
         setActiveTab('feedback');
@@ -349,11 +369,11 @@ const User = () => {
   const calculateCost = (vehicle, startDate, endDate, discountCode) => {
     const hours = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60));
     let total = hours * vehicle.hourlyRate;
-    
+
     if (discountCode?.toUpperCase() === vehicle.discountCode && vehicle.discountPercentage > 0) {
       total -= total * (vehicle.discountPercentage / 100);
     }
-    
+
     return { hours, total: Math.round(total * 100) / 100 };
   };
 
@@ -389,7 +409,7 @@ const User = () => {
             <p className="text-green-600">{summary.recommendationPercentage}% recommend</p>
           </div>
         </div>
-        
+
         {summary.commonIssues?.length > 0 && (
           <div>
             <p className="text-xs font-medium text-gray-700 mb-1">Common mentions:</p>
@@ -410,6 +430,25 @@ const User = () => {
     const completed = reservations.filter(r => r.status === 'completed');
     const feedbackIds = feedback.map(f => f.reservationId);
     return completed.filter(r => !feedbackIds.includes(r.reservationId));
+  };
+
+  const getSentimentBadge = (sentiment) => {
+    const colors = {
+      'POSITIVE': 'bg-green-100 text-green-800 border-green-300',
+      'NEGATIVE': 'bg-red-100 text-red-800 border-red-300',
+      'NEUTRAL': 'bg-gray-100 text-gray-800 border-gray-300',
+      'MIXED': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+    };
+    return colors[sentiment] || 'bg-gray-50 text-gray-600 border-gray-200';
+  };
+
+  const getSeverityBadge = (severity) => {
+    const colors = {
+      'HIGH': 'bg-red-100 text-red-700 border-red-300',
+      'MEDIUM': 'bg-yellow-100 text-yellow-700 border-yellow-300',
+      'LOW': 'bg-green-100 text-green-700 border-green-300',
+    };
+    return colors[severity] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
 
   // Component Constants
@@ -439,38 +478,35 @@ const User = () => {
               <Car className="w-8 h-8 text-blue-600" />
               <h1 className="text-xl font-bold text-gray-900">Dalscooter</h1>
             </div>
-            
+
             <nav className="flex space-x-8">
               <button
                 onClick={() => setActiveTab('browse')}
-                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'browse' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'browse' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Browse Vehicles
               </button>
-              
+
               {isAuthenticated && (
                 <>
                   <button
                     onClick={() => setActiveTab('reservations')}
-                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeTab === 'reservations' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
-                    }`}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'reservations' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                      }`}
                   >
                     My Reservations
                   </button>
                   <button
                     onClick={() => setActiveTab('feedback')}
-                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeTab === 'feedback' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
-                    }`}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'feedback' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'
+                      }`}
                   >
                     Feedback
                   </button>
                 </>
               )}
-              
+
               {isAuthenticated ? (
                 <button
                   onClick={handleLogout}
@@ -541,7 +577,7 @@ const User = () => {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Find Your Ride</h2>
                 <button
-                  onClick={() => setFilters({...filters, showFilters: !filters.showFilters})}
+                  onClick={() => setFilters({ ...filters, showFilters: !filters.showFilters })}
                   className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
                 >
                   <Filter className="w-4 h-4" />
@@ -555,7 +591,7 @@ const User = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Type</label>
                     <select
                       value={filters.type}
-                      onChange={(e) => setFilters({...filters, type: e.target.value})}
+                      onChange={(e) => setFilters({ ...filters, type: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">All Types</option>
@@ -569,7 +605,7 @@ const User = () => {
                     <input
                       type="text"
                       value={filters.location}
-                      onChange={(e) => setFilters({...filters, location: e.target.value})}
+                      onChange={(e) => setFilters({ ...filters, location: e.target.value })}
                       placeholder="Search location..."
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     />
@@ -579,7 +615,7 @@ const User = () => {
                     <input
                       type="number"
                       value={filters.maxRate}
-                      onChange={(e) => setFilters({...filters, maxRate: e.target.value})}
+                      onChange={(e) => setFilters({ ...filters, maxRate: e.target.value })}
                       placeholder="Enter max rate..."
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     />
@@ -640,7 +676,7 @@ const User = () => {
                               <span>View Reviews</span>
                             </button>
                             <button
-                              onClick={() => setExpandedVehicles({...expandedVehicles, [vehicle.vehicleId]: !expandedVehicles[vehicle.vehicleId]})}
+                              onClick={() => setExpandedVehicles({ ...expandedVehicles, [vehicle.vehicleId]: !expandedVehicles[vehicle.vehicleId] })}
                               className="text-sm text-gray-600 hover:text-gray-700 flex items-center space-x-1"
                             >
                               {expandedVehicles[vehicle.vehicleId] ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -769,7 +805,7 @@ const User = () => {
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(reservation.status)}`}>
                           {reservation.status.charAt(0).toUpperCase() + reservation.status.slice(1)}
                         </span>
-                        
+
                         {reservation.status === 'confirmed' && (
                           <>
                             <button
@@ -808,7 +844,7 @@ const User = () => {
                             </button>
                           </>
                         )}
-                        
+
                         {reservation.status === 'completed' && !feedback.some(f => f.reservationId === reservation.reservationId) && (
                           <button
                             onClick={() => {
@@ -1029,121 +1065,182 @@ const User = () => {
       </main>
 
       {/* Reviews Modal */}
-      {showReviewsModal && selectedVehicleForReviews && (
+      {/* Feedback Analytics Modal */}
+      {showFeedbackAnalyticsModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    {getVehicleIcon(selectedVehicleForReviews.vehicleType)}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900">{selectedVehicleForReviews.model} Reviews</h3>
-                    <p className="text-sm text-gray-500 capitalize">
-                      {selectedVehicleForReviews.vehicleType.replace('anebike', 'E-Bike')}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => setShowReviewsModal(false)} className="text-gray-400 hover:text-gray-600">
+              {/* Compact Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-gray-900">Customer Reviews</h3>
+                <button
+                  onClick={() => setShowFeedbackAnalyticsModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
-              {vehicleReviews[selectedVehicleForReviews.vehicleId] ? (
-                <div className="space-y-6">
-                  {/* Summary */}
-                  <div className="bg-gray-50 rounded-lg p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Overall Rating</h4>
-                        <div className="flex items-center space-x-4 mb-4">
-                          <div className="text-4xl font-bold text-gray-900">
-                            {vehicleReviews[selectedVehicleForReviews.vehicleId].reviewSummary.averageRating}
-                          </div>
-                          <div>
-                            {renderStars(Math.round(vehicleReviews[selectedVehicleForReviews.vehicleId].reviewSummary.averageRating))}
-                            <p className="text-sm text-gray-600 mt-1">
-                              Based on {vehicleReviews[selectedVehicleForReviews.vehicleId].reviewSummary.totalReviews} reviews
-                            </p>
-                          </div>
+              {analyticsLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-600">Loading reviews...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Quick Stats Bar */}
+                  {analyticsData && (
+                    <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4 mb-4">
+                      <div className="flex items-center space-x-6">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-gray-900">{analyticsData.totalAnalyzed}</p>
+                          <p className="text-xs text-gray-600">Total Reviews</p>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <ThumbsUp className="w-5 h-5 text-green-500" />
-                          <span className="text-sm font-medium text-green-700">
-                            {vehicleReviews[selectedVehicleForReviews.vehicleId].reviewSummary.recommendationPercentage}% recommend
-                          </span>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {analyticsData.sentimentDistribution?.percentages?.POSITIVE || 0}%
+                          </p>
+                          <p className="text-xs text-gray-600">Positive</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-red-600">
+                            {analyticsData.sentimentDistribution?.percentages?.NEGATIVE || 0}%
+                          </p>
+                          <p className="text-xs text-gray-600">Negative</p>
                         </div>
                       </div>
+
+                      {/* Compact Filters */}
+                      <div className="flex items-center space-x-3">
+                        <select
+                          value={analyticsFilters.sentiment}
+                          onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, sentiment: e.target.value })}
+                          className="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option value="">All Sentiments</option>
+                          <option value="POSITIVE">Positive</option>
+                          <option value="NEGATIVE">Negative</option>
+                          <option value="NEUTRAL">Neutral</option>
+                        </select>
+
+                        <select
+                          value={analyticsFilters.rating}
+                          onChange={(e) => setAnalyticsFilters({ ...analyticsFilters, rating: e.target.value })}
+                          className="text-sm border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option value="">All Ratings</option>
+                          <option value="5">5 Stars</option>
+                          <option value="4">4 Stars</option>
+                          <option value="3">3 Stars</option>
+                          <option value="2">2 Stars</option>
+                          <option value="1">1 Star</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Individual Reviews */}
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-4">Customer Reviews</h4>
-                    <div className="space-y-4">
-                      {vehicleReviews[selectedVehicleForReviews.vehicleId].reviews.map(review => (
-                        <div key={review.reviewId} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-medium text-gray-600">
-                                  {review.reviewer.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">{review.reviewer}</p>
-                                <p className="text-xs text-gray-500">{formatDate(review.reviewDate)}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {renderStars(review.rating)}
-                              <span className="text-sm font-medium text-gray-600">{review.rating}/5</span>
+                  {/* Reviews List - Main Focus */}
+                  <div className="space-y-4">
+                    {feedbackAnalytics.map((item) => (
+                      <div key={item.feedbackId} className="bg-white border rounded-lg p-5 hover:shadow-md transition-shadow">
+                        {/* Review Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 text-lg mb-1">{item.subject}</h4>
+                            <div className="flex items-center space-x-3 text-sm text-gray-600">
+                              <span>{item.vehicleType} - {item.vehicleModel}</span>
+                              <span>•</span>
+                              <span>{new Date(item.createdAt).toLocaleDateString()}</span>
                             </div>
                           </div>
-                          
-                          <div className="space-y-2">
-                            <h5 className="font-medium text-gray-900">{review.subject}</h5>
-                            <p className="text-gray-700 text-sm">{review.message}</p>
+                          <div className="flex items-center space-x-2">
+                            <div className="flex text-yellow-400 text-lg">
+                              {'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}
+                            </div>
+                            <span className="text-sm font-medium text-gray-700">({item.rating}/5)</span>
+                          </div>
+                        </div>
+
+                        {/* Review Message */}
+                        <div className="mb-4">
+                          <p className="text-gray-800 leading-relaxed">{item.message}</p>
+                        </div>
+
+                        {/* Compact Sentiment Info */}
+                        <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-500">Sentiment:</span>
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${getSentimentBadge(item.sentimentAnalysis?.sentiment)}`}>
+                                {item.sentimentAnalysis?.sentiment || 'UNKNOWN'}
+                              </span>
+                            </div>
+
+                            {item.sentimentAnalysis?.emotions && item.sentimentAnalysis.emotions.length > 0 && (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-gray-500">Emotions:</span>
+                                <div className="flex space-x-1">
+                                  {item.sentimentAnalysis.emotions.slice(0, 2).map((emotion, idx) => {
+                                    const emotionName = typeof emotion === 'object' ? emotion.emotion : emotion;
+                                    return (
+                                      <span key={idx} className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">
+                                        {emotionName}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
 
-                          {review.issues?.length > 0 && (
-                            <div className="mt-3">
-                              <div className="flex flex-wrap gap-2">
-                                {review.issues.map((issue, idx) => (
-                                  <span key={idx} className="inline-flex items-center px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
-                                    {issue}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex items-center space-x-3">
+                            {item.sentimentAnalysis?.severity && (
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${getSeverityBadge(item.sentimentAnalysis.severity)}`}>
+                                {item.sentimentAnalysis.severity} Priority
+                              </span>
+                            )}
 
-                          <div className="mt-3 flex items-center justify-between">
-                            <span className="inline-flex items-center px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
-                              {review.category}
-                            </span>
-                            <div className="flex items-center space-x-2">
-                              {review.wouldRecommend ? (
+                            <div className="flex items-center space-x-1">
+                              {item.wouldRecommend ? (
                                 <ThumbsUp className="w-4 h-4 text-green-600" />
                               ) : (
                                 <ThumbsDown className="w-4 h-4 text-red-600" />
                               )}
                               <span className="text-xs text-gray-600">
-                                {review.wouldRecommend ? 'Recommends' : 'Does not recommend'}
+                                {item.wouldRecommend ? 'Recommends' : 'Not recommended'}
                               </span>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Issues (if any) */}
+                        {(item.issues || []).length > 0 && (
+                          <div className="mt-3">
+                            <div className="flex flex-wrap gap-2">
+                              {item.issues.slice(0, 3).map((issue, idx) => (
+                                <span key={idx} className="inline-flex items-center px-2 py-1 text-xs bg-red-50 text-red-700 rounded">
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  {issue}
+                                </span>
+                              ))}
+                              {item.issues.length > 3 && (
+                                <span className="text-xs text-gray-500">+{item.issues.length - 3} more</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {feedbackAnalytics.length === 0 && (
+                      <div className="text-center py-16">
+                        <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                        <h4 className="text-xl text-gray-900 mb-2">No reviews found</h4>
+                        <p className="text-gray-600">Try adjusting your filters or check back later for new reviews.</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <span className="ml-2 text-gray-600">Loading reviews...</span>
-                </div>
+                </>
               )}
             </div>
           </div>
@@ -1187,7 +1284,7 @@ const User = () => {
                   <input
                     type="datetime-local"
                     value={reservationForm.startDate}
-                    onChange={(e) => setReservationForm({...reservationForm, startDate: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, startDate: e.target.value })}
                     min={new Date().toISOString().slice(0, 16)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
@@ -1198,7 +1295,7 @@ const User = () => {
                   <input
                     type="datetime-local"
                     value={reservationForm.endDate}
-                    onChange={(e) => setReservationForm({...reservationForm, endDate: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, endDate: e.target.value })}
                     min={reservationForm.startDate || new Date().toISOString().slice(0, 16)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
@@ -1209,7 +1306,7 @@ const User = () => {
                   <input
                     type="text"
                     value={reservationForm.discountCode}
-                    onChange={(e) => setReservationForm({...reservationForm, discountCode: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, discountCode: e.target.value })}
                     placeholder="Enter discount code..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
@@ -1219,7 +1316,7 @@ const User = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
                   <textarea
                     value={reservationForm.notes}
-                    onChange={(e) => setReservationForm({...reservationForm, notes: e.target.value})}
+                    onChange={(e) => setReservationForm({ ...reservationForm, notes: e.target.value })}
                     rows={3}
                     placeholder="Any special requirements..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
@@ -1291,7 +1388,7 @@ const User = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">Overall Rating</label>
                   <div className="flex items-center space-x-3">
-                    {renderStars(feedbackForm.rating, true, (rating) => setFeedbackForm({...feedbackForm, rating}))}
+                    {renderStars(feedbackForm.rating, true, (rating) => setFeedbackForm({ ...feedbackForm, rating }))}
                     <span className="text-sm text-gray-600">
                       {['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][feedbackForm.rating - 1]}
                     </span>
@@ -1301,7 +1398,7 @@ const User = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                   <select
                     value={feedbackForm.category}
-                    onChange={(e) => setFeedbackForm({...feedbackForm, category: e.target.value})}
+                    onChange={(e) => setFeedbackForm({ ...feedbackForm, category: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   >
                     {feedbackCategories.map(category => (
@@ -1317,7 +1414,7 @@ const User = () => {
                   <input
                     type="text"
                     value={feedbackForm.subject}
-                    onChange={(e) => setFeedbackForm({...feedbackForm, subject: e.target.value})}
+                    onChange={(e) => setFeedbackForm({ ...feedbackForm, subject: e.target.value })}
                     placeholder="Brief summary of your experience..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   />
@@ -1327,7 +1424,7 @@ const User = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Detailed Feedback</label>
                   <textarea
                     value={feedbackForm.message}
-                    onChange={(e) => setFeedbackForm({...feedbackForm, message: e.target.value})}
+                    onChange={(e) => setFeedbackForm({ ...feedbackForm, message: e.target.value })}
                     rows={4}
                     placeholder="Tell us about your experience..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
@@ -1348,7 +1445,7 @@ const User = () => {
                             const newIssues = feedbackForm.issues.includes(issue)
                               ? feedbackForm.issues.filter(i => i !== issue)
                               : [...feedbackForm.issues, issue];
-                            setFeedbackForm({...feedbackForm, issues: newIssues});
+                            setFeedbackForm({ ...feedbackForm, issues: newIssues });
                           }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
@@ -1368,7 +1465,7 @@ const User = () => {
                         type="radio"
                         name="recommend"
                         checked={feedbackForm.wouldRecommend === true}
-                        onChange={() => setFeedbackForm({...feedbackForm, wouldRecommend: true})}
+                        onChange={() => setFeedbackForm({ ...feedbackForm, wouldRecommend: true })}
                         className="text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-sm text-gray-700">Yes</span>
@@ -1378,7 +1475,7 @@ const User = () => {
                         type="radio"
                         name="recommend"
                         checked={feedbackForm.wouldRecommend === false}
-                        onChange={() => setFeedbackForm({...feedbackForm, wouldRecommend: false})}
+                        onChange={() => setFeedbackForm({ ...feedbackForm, wouldRecommend: false })}
                         className="text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-sm text-gray-700">No</span>

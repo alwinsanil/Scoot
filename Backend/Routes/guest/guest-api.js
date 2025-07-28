@@ -81,7 +81,8 @@ async function handleGuestRequest(pathParts, method, queryParams, body) {
                 return await handleGuestVehicleReviews(method, resourceId, queryParams);
             }
             return await handleGuestVehicles(method, resourceId, queryParams);
-        
+        case 'feedback':  // NEW
+            return await handleAllFeedbackEndpoint(method, queryParams, null);
         case 'callback':
             return handleAuthCallback(queryParams);
         
@@ -94,7 +95,8 @@ async function handleGuestRequest(pathParts, method, queryParams, body) {
                     'GET /guest/vehicles/{id}': 'Get specific vehicle details (public)',
                     'GET /guest/vehicles/{id}/reviews': 'Get vehicle reviews and ratings (public)',
                     'GET /guest/scooters': 'Alias for vehicles endpoint',
-                    'GET /guest/callback': 'Authentication callback handler'
+                    'GET /guest/callback': 'Authentication callback handler',
+                    'GET /guest/feedback': 'Get all feedback with sentiment analysis (public)', // NEW
                 }
             };
     }
@@ -254,7 +256,7 @@ async function getPublicVehicle(vehicleId, queryParams = {}) {
 
 // Public vehicle reviews functions
 async function getPublicVehicleReviews(vehicleId, queryParams) {
-    console.log('Getting public reviews for vehicle:', vehicleId);
+    console.log('Getting public reviews with sentiment analysis for vehicle:', vehicleId);
     
     // First verify the vehicle exists and is available
     await getPublicVehicle(vehicleId, { includeReviews: false });
@@ -267,7 +269,7 @@ async function getPublicVehicleReviews(vehicleId, queryParams) {
         }
     };
 
-    // Add optional filters
+    // Add optional filters including sentiment filter
     if (queryParams.rating) {
         params.FilterExpression += ' AND rating = :rating';
         params.ExpressionAttributeValues[':rating'] = parseInt(queryParams.rating);
@@ -283,29 +285,26 @@ async function getPublicVehicleReviews(vehicleId, queryParams) {
         params.ExpressionAttributeValues[':minRating'] = parseInt(queryParams.minRating);
     }
 
+    //NEW: Add sentiment filter
+    if (queryParams.sentiment) {
+        params.FilterExpression += ' AND sentiment = :sentiment';
+        params.ExpressionAttributeValues[':sentiment'] = queryParams.sentiment.toUpperCase();
+    }
+
     const result = await dynamodb.scan(params).promise();
     
     if (!result.Items || result.Items.length === 0) {
         return {
             success: true,
             reviews: [],
-            reviewSummary: {
-                averageRating: 0,
-                totalReviews: 0,
-                ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-                recommendationPercentage: 0
-            },
-            pagination: {
-                currentPage: 1,
-                totalPages: 0,
-                totalReviews: 0,
-                limit: parseInt(queryParams.limit) || 20
-            },
+            reviewSummary: getEmptyReviewSummary(),
+            sentimentAnalytics: getEmptySentimentAnalytics(), // 🎯 NEW
+            pagination: getPaginationDefaults(queryParams),
             message: 'No reviews found for this vehicle'
         };
     }
 
-    // Create public reviews (remove sensitive user information)
+    //ENHANCED: Create public reviews WITH sentiment analysis
     const publicReviews = result.Items.map(review => ({
         reviewId: review.feedbackId,
         rating: review.rating,
@@ -315,56 +314,281 @@ async function getPublicVehicleReviews(vehicleId, queryParams) {
         wouldRecommend: review.wouldRecommend,
         issues: review.issues || [],
         reviewDate: review.createdAt,
-        // Anonymize user info - show only first letter and domain
         reviewer: anonymizeEmail(review.userEmail),
         vehicleType: review.vehicleType,
         vehicleModel: review.vehicleModel,
-        // Add helpful metadata
-        isVerified: true, // All reviews are from actual bookings
-        helpfulCount: Math.floor(Math.random() * 10), // Could be implemented later
+        isVerified: true,
+        helpfulCount: Math.floor(Math.random() * 10),
+        
+        //SENTIMENT ANALYSIS DATA (This was missing!)
+        sentimentAnalysis: {
+            sentiment: review.sentiment || 'UNKNOWN',
+            confidence: review.sentimentConfidence || 'LOW',
+            score: review.sentimentScore || 0,
+            emotions: review.emotions || [],
+            keyPhrases: review.keyPhrases || [],
+            detectedIssues: review.detectedIssues || [],
+            severity: determineSeverityLevel(review),
+            analysisDate: review.analyzedAt || review.createdAt
+        }
     }));
 
-    // Sort by creation date (newest first) or by rating if specified
-    if (queryParams.sortBy === 'rating') {
-        publicReviews.sort((a, b) => {
-            if (queryParams.sortOrder === 'asc') {
-                return a.rating - b.rating;
-            }
-            return b.rating - a.rating;
-        });
-    } else {
-        publicReviews.sort((a, b) => new Date(b.reviewDate) - new Date(a.reviewDate));
-    }
+    // Sort by creation date or rating
+    sortReviews(publicReviews, queryParams);
 
     // Apply pagination
-    const page = parseInt(queryParams.page) || 1;
-    const limit = parseInt(queryParams.limit) || 20;
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedReviews = publicReviews.slice(startIndex, endIndex);
+    const paginatedReviews = applyPagination(publicReviews, queryParams);
 
-    // Calculate review summary
-    const reviewSummary = calculateReviewSummary(result.Items);
+    // ENHANCED: Calculate review summary WITH sentiment analytics
+    const reviewSummary = calculateEnhancedReviewSummary(result.Items);
+    const sentimentAnalytics = calculateSentimentAnalytics(result.Items);
 
     return {
         success: true,
-        reviews: paginatedReviews,
+        reviews: paginatedReviews.reviews,
         reviewSummary: reviewSummary,
-        pagination: {
-            currentPage: page,
-            totalPages: Math.ceil(publicReviews.length / limit),
-            totalReviews: publicReviews.length,
-            limit: limit,
-            hasNextPage: endIndex < publicReviews.length,
-            hasPreviousPage: page > 1
-        },
+        sentimentAnalytics: sentimentAnalytics, // NEW: Sentiment insights
+        pagination: paginatedReviews.pagination,
         filters: {
             availableCategories: getAvailableCategories(result.Items),
-            ratingRange: { min: 1, max: 5 }
+            availableSentiments: getAvailableSentiments(result.Items), //NEW
+            ratingRange: { min: 1, max: 5 },
+            severityLevels: ['LOW', 'MEDIUM', 'HIGH'] //NEW
         },
-        message: 'Vehicle reviews retrieved successfully'
+        message: 'Vehicle reviews with sentiment analysis retrieved successfully'
     };
 }
+
+function calculateSentimentAnalytics(reviews) {
+    if (!reviews || reviews.length === 0) {
+        return getEmptySentimentAnalytics();
+    }
+
+    const total = reviews.length;
+    
+    // Sentiment distribution
+    const sentimentCounts = {
+        POSITIVE: reviews.filter(r => r.sentiment === 'POSITIVE').length,
+        NEGATIVE: reviews.filter(r => r.sentiment === 'NEGATIVE').length,
+        NEUTRAL: reviews.filter(r => r.sentiment === 'NEUTRAL').length,
+        MIXED: reviews.filter(r => r.sentiment === 'MIXED').length,
+        UNKNOWN: reviews.filter(r => !r.sentiment || r.sentiment === 'UNKNOWN').length
+    };
+
+    const sentimentPercentages = {};
+    Object.keys(sentimentCounts).forEach(sentiment => {
+        sentimentPercentages[sentiment] = Math.round((sentimentCounts[sentiment] / total) * 100);
+    });
+
+    // Confidence distribution
+    const confidenceCounts = {
+        HIGH: reviews.filter(r => r.sentimentConfidence === 'HIGH').length,
+        MEDIUM: reviews.filter(r => r.sentimentConfidence === 'MEDIUM').length,
+        LOW: reviews.filter(r => r.sentimentConfidence === 'LOW').length
+    };
+
+    // Top emotions across all reviews
+    const allEmotions = [];
+    reviews.forEach(review => {
+        if (review.emotions && Array.isArray(review.emotions)) {
+            review.emotions.forEach(emotion => {
+                const emotionName = typeof emotion === 'object' ? emotion.emotion : emotion;
+                allEmotions.push(emotionName);
+            });
+        }
+    });
+
+    const emotionFrequency = {};
+    allEmotions.forEach(emotion => {
+        emotionFrequency[emotion] = (emotionFrequency[emotion] || 0) + 1;
+    });
+
+    const topEmotions = Object.entries(emotionFrequency)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5)
+        .map(([emotion, count]) => ({
+            emotion,
+            count,
+            percentage: Math.round((count / total) * 100)
+        }));
+
+    // Key phrases across all reviews
+    const allKeyPhrases = [];
+    reviews.forEach(review => {
+        if (review.keyPhrases && Array.isArray(review.keyPhrases)) {
+            allKeyPhrases.push(...review.keyPhrases);
+        }
+    });
+
+    const phraseFrequency = {};
+    allKeyPhrases.forEach(phrase => {
+        phraseFrequency[phrase] = (phraseFrequency[phrase] || 0) + 1;
+    });
+
+    const topKeyPhrases = Object.entries(phraseFrequency)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([phrase, count]) => ({
+            phrase,
+            count,
+            percentage: Math.round((count / total) * 100)
+        }));
+
+    // Severity analysis
+    const severityCounts = {
+        HIGH: 0, MEDIUM: 0, LOW: 0
+    };
+    
+    reviews.forEach(review => {
+        const severity = determineSeverityLevel(review);
+        severityCounts[severity]++;
+    });
+
+    return {
+        totalAnalyzed: total,
+        sentimentDistribution: {
+            counts: sentimentCounts,
+            percentages: sentimentPercentages
+        },
+        confidenceDistribution: confidenceCounts,
+        topEmotions: topEmotions,
+        topKeyPhrases: topKeyPhrases,
+        severityDistribution: severityCounts,
+        insights: {
+            dominantSentiment: Object.entries(sentimentCounts).sort(([,a], [,b]) => b - a)[0][0],
+            highConfidenceRate: Math.round((confidenceCounts.HIGH / total) * 100),
+            mostCommonEmotion: topEmotions[0]?.emotion || 'None detected',
+            analysisQuality: confidenceCounts.HIGH > total * 0.6 ? 'HIGH' : 
+                           confidenceCounts.HIGH > total * 0.3 ? 'MEDIUM' : 'LOW'
+        }
+    };
+}
+
+// 🎯 NEW: Enhanced review summary with sentiment data
+function calculateEnhancedReviewSummary(reviews) {
+    const basicSummary = calculateReviewSummary(reviews);
+    
+    if (!reviews || reviews.length === 0) {
+        return basicSummary;
+    }
+
+    // Add sentiment-specific insights
+    const sentimentInsights = {
+        positiveReviewsAvgRating: calculateAvgRatingBySentiment(reviews, 'POSITIVE'),
+        negativeReviewsAvgRating: calculateAvgRatingBySentiment(reviews, 'NEGATIVE'),
+        sentimentRatingCorrelation: calculateSentimentRatingCorrelation(reviews),
+        emotionalHighlights: getEmotionalHighlights(reviews)
+    };
+
+    return {
+        ...basicSummary,
+        sentimentInsights: sentimentInsights
+    };
+}
+
+async function handleAllFeedbackEndpoint(method, queryParams, userInfo) {
+    switch (method) {
+        case 'GET':
+            return await getAllFeedbackWithSentimentAnalysis(queryParams, userInfo);
+        default:
+            throw { statusCode: 405, message: `Method ${method} not allowed` };
+    }
+}
+
+async function getAllFeedbackWithSentimentAnalysis(queryParams, userInfo) {
+    console.log('Getting all feedback with sentiment analysis');
+    
+    let params = {
+        TableName: FEEDBACK_TABLE
+    };
+
+    // Add filters
+    const filters = [];
+    const attributeValues = {};
+
+    if (queryParams.vehicleId) {
+        filters.push('vehicleId = :vehicleId');
+        attributeValues[':vehicleId'] = queryParams.vehicleId;
+    }
+
+    if (queryParams.sentiment) {
+        filters.push('sentiment = :sentiment');
+        attributeValues[':sentiment'] = queryParams.sentiment.toUpperCase();
+    }
+
+    if (queryParams.rating) {
+        filters.push('rating = :rating');
+        attributeValues[':rating'] = parseInt(queryParams.rating);
+    }
+
+    if (queryParams.severity) {
+        // Note: severity would need to be calculated on the fly or stored
+        // For now, we'll filter after retrieval
+    }
+
+    if (filters.length > 0) {
+        params.FilterExpression = filters.join(' AND ');
+        params.ExpressionAttributeValues = attributeValues;
+    }
+
+    const result = await dynamodb.scan(params).promise();
+    
+    // Format all feedback with sentiment analysis
+    let allFeedback = result.Items.map(item => ({
+        // Basic feedback info
+        feedbackId: item.feedbackId,
+        userId: item.userId,
+        userEmail: userInfo?.isAdmin ? item.userEmail : anonymizeEmail(item.userEmail),
+        vehicleId: item.vehicleId,
+        vehicleType: item.vehicleType || 'Unknown',
+        vehicleModel: item.vehicleModel || 'Unknown',
+        reservationId: item.reservationId,
+        rating: item.rating,
+        category: item.category,
+        subject: item.subject,
+        message: item.message,
+        wouldRecommend: item.wouldRecommend,
+        issues: item.issues || [],
+        createdAt: item.createdAt,
+        
+        // 🎯 SENTIMENT ANALYSIS (The main requirement!)
+        sentimentAnalysis: {
+            sentiment: item.sentiment || 'UNKNOWN',
+            confidence: item.sentimentConfidence || 'LOW',
+            score: item.sentimentScore || 0,
+            emotions: item.emotions || [],
+            keyPhrases: item.keyPhrases || [],
+            detectedIssues: item.detectedIssues || [],
+            severity: determineSeverityLevel(item),
+            analysisDate: item.analyzedAt || item.createdAt,
+            analysisVersion: item.analysisVersion || '1.0'
+        }
+    }));
+
+    // Apply severity filter if requested (post-processing)
+    if (queryParams.severity) {
+        allFeedback = allFeedback.filter(f => 
+            f.sentimentAnalysis.severity === queryParams.severity.toUpperCase()
+        );
+    }
+
+    // Sort the results
+    allFeedback.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Calculate comprehensive analytics
+    const analytics = calculateSentimentAnalytics(result.Items);
+    const reviewSummary = calculateEnhancedReviewSummary(result.Items);
+
+    return {
+        success: true,
+        feedback: allFeedback,
+        analytics: analytics,
+        reviewSummary: reviewSummary,
+        totalCount: allFeedback.length,
+        message: 'All feedback with sentiment analysis retrieved successfully'
+    };
+}
+
 
 async function getVehicleReviewSummary(vehicleId) {
     console.log('Getting review summary for vehicle:', vehicleId);
@@ -550,6 +774,155 @@ function getAveragesByMonth(reviews) {
     });
     
     return result;
+}
+
+
+// Helper functions for sentiment analysis
+function determineSeverityLevel(review) {
+    // Determine severity based on rating, sentiment, and issues
+    if (review.rating <= 2 || review.sentiment === 'NEGATIVE') {
+        return 'HIGH';
+    }
+    if (review.rating <= 3 || (review.issues && review.issues.length > 2)) {
+        return 'MEDIUM';
+    }
+    return 'LOW';
+}
+
+function getAvailableSentiments(reviews) {
+    const sentiments = new Set();
+    reviews.forEach(review => {
+        if (review.sentiment) {
+            sentiments.add(review.sentiment);
+        }
+    });
+    return Array.from(sentiments);
+}
+
+function calculateAvgRatingBySentiment(reviews, sentiment) {
+    const sentimentReviews = reviews.filter(r => r.sentiment === sentiment);
+    if (sentimentReviews.length === 0) return 0;
+    
+    const sum = sentimentReviews.reduce((acc, r) => acc + r.rating, 0);
+    return Math.round((sum / sentimentReviews.length) * 10) / 10;
+}
+
+function calculateSentimentRatingCorrelation(reviews) {
+    // Simple correlation check
+    const positiveHighRating = reviews.filter(r => r.sentiment === 'POSITIVE' && r.rating >= 4).length;
+    const negativeHighRating = reviews.filter(r => r.sentiment === 'NEGATIVE' && r.rating >= 4).length;
+    const total = reviews.length;
+    
+    return {
+        consistency: Math.round(((positiveHighRating + (total - negativeHighRating)) / total) * 100),
+        conflicts: reviews.filter(r => 
+            (r.sentiment === 'POSITIVE' && r.rating <= 2) || 
+            (r.sentiment === 'NEGATIVE' && r.rating >= 4)
+        ).length
+    };
+}
+
+function getEmotionalHighlights(reviews) {
+    // Extract most emotional positive and negative reviews
+    const positiveEmotional = reviews
+        .filter(r => r.sentiment === 'POSITIVE' && r.emotions && r.emotions.length > 0)
+        .sort((a, b) => b.rating - a.rating)[0];
+        
+    const negativeEmotional = reviews
+        .filter(r => r.sentiment === 'NEGATIVE' && r.emotions && r.emotions.length > 0)
+        .sort((a, b) => a.rating - b.rating)[0];
+
+    return {
+        mostPositiveReview: positiveEmotional ? {
+            subject: positiveEmotional.subject,
+            emotions: positiveEmotional.emotions.slice(0, 3),
+            rating: positiveEmotional.rating
+        } : null,
+        mostNegativeReview: negativeEmotional ? {
+            subject: negativeEmotional.subject,
+            emotions: negativeEmotional.emotions.slice(0, 3),
+            rating: negativeEmotional.rating
+        } : null
+    };
+}
+
+function getEmptyReviewSummary() {
+    return {
+        averageRating: 0,
+        totalReviews: 0,
+        ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+        recommendationPercentage: 0,
+        commonIssues: [],
+        lastReviewDate: null
+    };
+}
+
+function getEmptySentimentAnalytics() {
+    return {
+        totalAnalyzed: 0,
+        sentimentDistribution: {
+            counts: { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0, MIXED: 0, UNKNOWN: 0 },
+            percentages: { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0, MIXED: 0, UNKNOWN: 0 }
+        },
+        confidenceDistribution: { HIGH: 0, MEDIUM: 0, LOW: 0 },
+        topEmotions: [],
+        topKeyPhrases: [],
+        severityDistribution: { HIGH: 0, MEDIUM: 0, LOW: 0 },
+        insights: {
+            dominantSentiment: 'UNKNOWN',
+            highConfidenceRate: 0,
+            mostCommonEmotion: 'None',
+            analysisQuality: 'LOW'
+        }
+    };
+}
+
+function getPaginationDefaults(queryParams) {
+    return {
+        currentPage: 1,
+        totalPages: 0,
+        totalReviews: 0,
+        limit: parseInt(queryParams.limit) || 20
+    };
+}
+
+function sortReviews(reviews, queryParams) {
+    if (queryParams.sortBy === 'rating') {
+        reviews.sort((a, b) => {
+            if (queryParams.sortOrder === 'asc') {
+                return a.rating - b.rating;
+            }
+            return b.rating - a.rating;
+        });
+    } else if (queryParams.sortBy === 'sentiment') {
+        // Sort by sentiment priority: NEGATIVE, POSITIVE, NEUTRAL, MIXED
+        const sentimentPriority = { 'NEGATIVE': 1, 'POSITIVE': 2, 'NEUTRAL': 3, 'MIXED': 4, 'UNKNOWN': 5 };
+        reviews.sort((a, b) => {
+            return sentimentPriority[a.sentimentAnalysis.sentiment] - sentimentPriority[b.sentimentAnalysis.sentiment];
+        });
+    } else {
+        reviews.sort((a, b) => new Date(b.reviewDate) - new Date(a.reviewDate));
+    }
+}
+
+function applyPagination(reviews, queryParams) {
+    const page = parseInt(queryParams.page) || 1;
+    const limit = parseInt(queryParams.limit) || 20;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedReviews = reviews.slice(startIndex, endIndex);
+
+    return {
+        reviews: paginatedReviews,
+        pagination: {
+            currentPage: page,
+            totalPages: Math.ceil(reviews.length / limit),
+            totalReviews: reviews.length,
+            limit: limit,
+            hasNextPage: endIndex < reviews.length,
+            hasPreviousPage: page > 1
+        }
+    };
 }
 
 function getCorsHeaders() {
