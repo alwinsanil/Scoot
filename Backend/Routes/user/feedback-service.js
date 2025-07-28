@@ -64,12 +64,11 @@ class FeedbackService {
             wouldRecommend: feedbackData.wouldRecommend !== false,
             issues: feedbackData.issues || [],
             
-            // Sentiment analysis results
+            // Sentiment analysis results (emotions removed)
             sentiment: sentimentAnalysis.sentiment,
             sentimentScore: sentimentAnalysis.score,
             sentimentConfidence: sentimentAnalysis.confidence,
             keyPhrases: sentimentAnalysis.keyPhrases,
-            emotions: sentimentAnalysis.emotions,
             
             // Metadata
             analysisVersion: '1.0',
@@ -112,8 +111,7 @@ class FeedbackService {
             // Extract key phrases and themes
             const keyPhrases = this.extractKeyPhrases(fullText);
             
-            // Detect emotions and issues
-            const emotions = this.detectEmotions(fullText);
+            // Detect issues (but not emotions)
             const issues = this.detectIssues(fullText);
 
             return {
@@ -122,7 +120,6 @@ class FeedbackService {
                 confidence: sentimentResults.confidenceLevel,
                 allScores: sentimentResults.allScores,
                 keyPhrases: keyPhrases,
-                emotions: emotions,
                 detectedIssues: issues,
                 analysisBreakdown: sentimentResults.breakdown
             };
@@ -256,36 +253,6 @@ class FeedbackService {
             .slice(0, 5);
             
         return [...keyPhrases, ...bigramPhrases];
-    }
-
-    detectEmotions(text) {
-        // Simple emotion detection based on keywords
-        const emotionKeywords = {
-            joy: ['happy', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'perfect', 'awesome', 'brilliant'],
-            anger: ['angry', 'mad', 'furious', 'annoyed', 'irritated', 'frustrated', 'outraged', 'livid'],
-            sadness: ['sad', 'disappointed', 'upset', 'depressed', 'unhappy', 'miserable', 'devastated'],
-            fear: ['scared', 'afraid', 'worried', 'anxious', 'nervous', 'terrified', 'concerned'],
-            surprise: ['surprised', 'shocked', 'amazed', 'astonished', 'unexpected', 'sudden'],
-            disgust: ['disgusting', 'awful', 'terrible', 'horrible', 'gross', 'revolting', 'appalling'],
-            trust: ['reliable', 'trustworthy', 'dependable', 'confident', 'secure', 'safe'],
-            anticipation: ['excited', 'eager', 'looking forward', 'anticipating', 'hopeful']
-        };
-        
-        const textLower = text.toLowerCase();
-        const detectedEmotions = [];
-        
-        Object.entries(emotionKeywords).forEach(([emotion, keywords]) => {
-            const matches = keywords.filter(keyword => textLower.includes(keyword));
-            if (matches.length > 0) {
-                detectedEmotions.push({
-                    emotion,
-                    confidence: Math.min(matches.length / keywords.length, 1),
-                    keywords: matches
-                });
-            }
-        });
-        
-        return detectedEmotions.sort((a, b) => b.confidence - a.confidence);
     }
 
     detectIssues(text) {
