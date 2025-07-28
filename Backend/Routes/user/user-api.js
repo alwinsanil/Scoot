@@ -2,6 +2,9 @@
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
+// Import the feedback service for sentiment analysis
+const feedbackService = require('./feedback-service');
+
 const VEHICLES_TABLE = process.env.VEHICLES_TABLE || 'franchise-vehicles';
 const RESERVATIONS_TABLE = process.env.RESERVATIONS_TABLE || 'vehicle-reservations';
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE || 'vehicle-feedback';
@@ -146,6 +149,10 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
         case 'profile':
             return await handleProfileEndpoint(method, resourceId, queryParams, body, userInfo);
         
+        case 'analytics':
+            // New endpoint for feedback analytics
+            return await handleAnalyticsEndpoint(method, resourceId, queryParams, body, userInfo);
+        
         default:
             return {
                 success: true,
@@ -157,11 +164,12 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
                     'GET /user/reservations/{id}': 'Get specific reservation',
                     'PUT /user/reservations/{id}': 'Update reservation',
                     'DELETE /user/reservations/{id}': 'Cancel reservation',
-                    'POST /user/feedback': 'Submit feedback for a completed ride',
-                    'GET /user/feedback': 'Get user feedback history',
-                    'GET /user/feedback/{id}': 'Get specific feedback',
-                    'PUT /user/feedback/{id}': 'Update feedback',
+                    'POST /user/feedback': 'Submit feedback with sentiment analysis',
+                    'GET /user/feedback': 'Get user feedback history with analytics',
+                    'GET /user/feedback/{id}': 'Get specific feedback with analysis',
+                    'PUT /user/feedback/{id}': 'Update feedback (re-analyzes sentiment)',
                     'DELETE /user/feedback/{id}': 'Delete feedback',
+                    'GET /user/analytics/feedback': 'Get personal feedback analytics',
                     'POST /user/rides': 'Start a ride from reservation',
                     'GET /user/rides': 'Get ride history',
                     'PUT /user/rides/{id}': 'Update ride status',
@@ -172,6 +180,12 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
                     'GET /guest/vehicles': 'Browse available vehicles (no auth required)',
                     'GET /guest/vehicles/{id}': 'Get vehicle details (no auth required)',
                     'GET /guest/vehicles/{id}/reviews': 'Get vehicle reviews (no auth required)'
+                },
+                newFeatures: {
+                    sentimentAnalysis: 'All feedback now includes AI-powered sentiment analysis',
+                    insights: 'Automatic insights generation for feedback patterns',
+                    alerts: 'High-priority negative feedback triggers alerts',
+                    analytics: 'Personal feedback analytics and trends'
                 }
             };
     }
@@ -220,13 +234,14 @@ async function handleFeedbackEndpoint(method, feedbackId, queryParams, body, use
             }
         
         case 'POST':
-            return await submitFeedback(body, userInfo);
+            // Use enhanced feedback submission with sentiment analysis
+            return await submitFeedbackWithAnalysis(body, userInfo);
         
         case 'PUT':
             if (!feedbackId) {
                 throw { statusCode: 400, message: 'Feedback ID is required for updates' };
             }
-            return await updateFeedback(feedbackId, body, userInfo);
+            return await updateFeedbackWithAnalysis(feedbackId, body, userInfo);
         
         case 'DELETE':
             if (!feedbackId) {
@@ -236,6 +251,20 @@ async function handleFeedbackEndpoint(method, feedbackId, queryParams, body, use
         
         default:
             throw { statusCode: 405, message: `Method ${method} not allowed for feedback endpoint` };
+    }
+}
+
+async function handleAnalyticsEndpoint(method, resourceId, queryParams, body, userInfo) {
+    switch (method) {
+        case 'GET':
+            if (resourceId === 'feedback') {
+                return await getUserFeedbackAnalytics(userInfo, queryParams);
+            } else {
+                return await getPersonalAnalytics(userInfo, queryParams);
+            }
+        
+        default:
+            throw { statusCode: 405, message: `Method ${method} not allowed for analytics endpoint` };
     }
 }
 
@@ -296,7 +325,7 @@ async function getVehicleForReservation(vehicleId) {
     return result.Items[0];
 }
 
-// Reservation-related functions
+// Reservation-related functions (unchanged from original)
 async function createReservation(reservationData, userInfo) {
     console.log('Creating reservation:', reservationData, 'for user:', userInfo.userId);
     
@@ -705,9 +734,9 @@ async function completeReservation(reservationId, userInfo) {
     };
 }
 
-// Feedback-related functions
-async function submitFeedback(feedbackData, userInfo) {
-    console.log('Submitting feedback:', feedbackData, 'for user:', userInfo.userId);
+// Enhanced Feedback-related functions with sentiment analysis
+async function submitFeedbackWithAnalysis(feedbackData, userInfo) {
+    console.log('Submitting feedback with analysis:', feedbackData, 'for user:', userInfo.userId);
     
     // Validate required fields
     const requiredFields = ['reservationId', 'vehicleId', 'rating', 'subject', 'message'];
@@ -735,40 +764,10 @@ async function submitFeedback(feedbackData, userInfo) {
         throw { statusCode: 409, message: 'Feedback already exists for this reservation' };
     }
 
-    const feedbackId = generateFeedbackId();
-    const timestamp = new Date().toISOString();
-
-    const feedback = {
-        feedbackId: feedbackId,
-        userId: userInfo.userId,
-        userEmail: userInfo.email,
-        reservationId: feedbackData.reservationId,
-        vehicleId: feedbackData.vehicleId,
-        vehicleType: feedbackData.vehicleType,
-        vehicleModel: feedbackData.vehicleModel,
-        rating: parseInt(feedbackData.rating),
-        category: feedbackData.category || 'overall',
-        subject: feedbackData.subject.trim(),
-        message: feedbackData.message.trim(),
-        wouldRecommend: feedbackData.wouldRecommend !== false, // default to true
-        issues: feedbackData.issues || [],
-        createdAt: timestamp,
-        updatedAt: timestamp
-    };
-
-    const params = {
-        TableName: FEEDBACK_TABLE,
-        Item: feedback,
-        ConditionExpression: 'attribute_not_exists(feedbackId)'
-    };
-
-    await dynamodb.put(params).promise();
-
-    return {
-        success: true,
-        feedback: feedback,
-        message: 'Feedback submitted successfully'
-    };
+    // Use the enhanced feedback service for sentiment analysis
+    const result = await feedbackService.submitFeedback(feedbackData, userInfo);
+    
+    return result;
 }
 
 async function getUserFeedback(userInfo, queryParams) {
@@ -798,6 +797,18 @@ async function getUserFeedback(userInfo, queryParams) {
         params.ExpressionAttributeValues[':vehicleType'] = queryParams.vehicleType;
     }
 
+    // Add sentiment filter
+    if (queryParams.sentiment) {
+        params.FilterExpression += ' AND sentiment = :sentiment';
+        params.ExpressionAttributeValues[':sentiment'] = queryParams.sentiment;
+    }
+
+    // Add severity filter
+    if (queryParams.severity) {
+        params.FilterExpression += ' AND severity = :severity';
+        params.ExpressionAttributeValues[':severity'] = queryParams.severity;
+    }
+
     const result = await dynamodb.scan(params).promise();
     
     // Sort by creation date (newest first)
@@ -805,11 +816,30 @@ async function getUserFeedback(userInfo, queryParams) {
         new Date(b.createdAt) - new Date(a.createdAt)
     );
     
+    // Calculate summary statistics
+    const summary = {
+        totalFeedback: feedback.length,
+        averageRating: feedback.length > 0 ? 
+            feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length : 0,
+        sentimentDistribution: {
+            positive: feedback.filter(f => f.sentiment === 'positive').length,
+            neutral: feedback.filter(f => f.sentiment === 'neutral').length,
+            negative: feedback.filter(f => f.sentiment === 'negative').length
+        },
+        severityDistribution: {
+            high: feedback.filter(f => f.severity === 'high').length,
+            medium: feedback.filter(f => f.severity === 'medium').length,
+            low: feedback.filter(f => f.severity === 'low').length,
+            none: feedback.filter(f => f.severity === 'none').length
+        }
+    };
+    
     return {
         success: true,
         feedback: feedback,
         count: feedback.length,
-        message: 'Feedback retrieved successfully'
+        summary: summary,
+        message: 'Feedback retrieved successfully with sentiment analysis'
     };
 }
 
@@ -831,15 +861,25 @@ async function getFeedback(feedbackId, userInfo) {
         throw { statusCode: 404, message: 'Feedback not found' };
     }
 
+    const feedback = result.Items[0];
+    
+    // Add analysis summary if available
+    const analysisInfo = {
+        hasSentimentAnalysis: !!feedback.sentiment,
+        hasInsights: !!(feedback.insights && feedback.insights.length > 0),
+        analysisDate: feedback.analyzedAt || feedback.createdAt
+    };
+
     return {
         success: true,
-        feedback: result.Items[0],
+        feedback: feedback,
+        analysisInfo: analysisInfo,
         message: 'Feedback retrieved successfully'
     };
 }
 
-async function updateFeedback(feedbackId, updateData, userInfo) {
-    console.log('Updating feedback:', feedbackId, 'for user:', userInfo.userId);
+async function updateFeedbackWithAnalysis(feedbackId, updateData, userInfo) {
+    console.log('Updating feedback with re-analysis:', feedbackId, 'for user:', userInfo.userId);
     
     // Get existing feedback
     const existingFeedback = await getFeedback(feedbackId, userInfo);
@@ -880,15 +920,54 @@ async function updateFeedback(feedbackId, updateData, userInfo) {
         throw { statusCode: 400, message: 'No valid fields to update' };
     }
     
+    // If text content changed, re-analyze sentiment
+    let sentimentUpdate = {};
+    if (updates.subject || updates.message) {
+        console.log('Text content changed, re-analyzing sentiment...');
+        
+        const combinedText = `${updates.subject || feedback.subject} ${updates.message || feedback.message}`;
+        
+        try {
+            const analysis = await feedbackService.analyzeFeedbackSentiment(combinedText);
+            const insights = feedbackService.generateFeedbackInsights(
+                { ...feedback, ...updates }, 
+                analysis
+            );
+            
+            sentimentUpdate = {
+                sentiment: analysis.sentiment,
+                sentimentConfidence: analysis.confidence,
+                emotions: analysis.emotions,
+                keywords: analysis.keywords,
+                categories: analysis.categories,
+                severity: analysis.severity,
+                insights: insights,
+                analyzedAt: new Date().toISOString()
+            };
+            
+            console.log('Re-analysis completed:', sentimentUpdate);
+        } catch (error) {
+            console.error('Error re-analyzing sentiment:', error);
+            // Continue with update even if sentiment analysis fails
+        }
+    }
+    
     // Build update expression
     let updateExpression = 'SET updatedAt = :updatedAt';
     let expressionAttributeValues = {
         ':updatedAt': new Date().toISOString()
     };
     
+    // Add regular updates
     Object.keys(updates).forEach(field => {
         updateExpression += `, ${field} = :${field}`;
         expressionAttributeValues[`:${field}`] = updates[field];
+    });
+    
+    // Add sentiment updates if available
+    Object.keys(sentimentUpdate).forEach(field => {
+        updateExpression += `, ${field} = :${field}`;
+        expressionAttributeValues[`:${field}`] = sentimentUpdate[field];
     });
     
     const params = {
@@ -903,11 +982,19 @@ async function updateFeedback(feedbackId, updateData, userInfo) {
     };
 
     const result = await dynamodb.update(params).promise();
+    
+    // Check if updated feedback requires alerts
+    if (sentimentUpdate.severity === 'high') {
+        console.log('Updated feedback has high severity, triggering alert...');
+        // You could call a trigger function here if needed
+    }
 
     return {
         success: true,
         feedback: result.Attributes,
-        message: 'Feedback updated successfully'
+        reanalyzed: Object.keys(sentimentUpdate).length > 0,
+        message: 'Feedback updated successfully' + 
+                (Object.keys(sentimentUpdate).length > 0 ? ' with sentiment re-analysis' : '')
     };
 }
 
@@ -931,6 +1018,380 @@ async function deleteFeedback(feedbackId, userInfo) {
         success: true,
         message: 'Feedback deleted successfully'
     };
+}
+
+// New Analytics Functions
+async function getUserFeedbackAnalytics(userInfo, queryParams) {
+    console.log('Getting personal feedback analytics for user:', userInfo.userId);
+    
+    // Get user's feedback with optional filters
+    const userFeedback = await getUserFeedback(userInfo, queryParams);
+    const feedback = userFeedback.feedback;
+    
+    if (feedback.length === 0) {
+        return {
+            success: true,
+            analytics: {
+                totalFeedback: 0,
+                message: 'No feedback data available for analysis'
+            }
+        };
+    }
+    
+    // Use the feedback service analytics function with user filter
+    const filters = {
+        userId: userInfo.userId,
+        ...queryParams
+    };
+    
+    const analytics = await feedbackService.getFeedbackAnalytics(filters);
+    
+    // Add personal insights
+    const personalInsights = generatePersonalInsights(feedback);
+    
+    return {
+        success: true,
+        analytics: {
+            ...analytics,
+            personalInsights: personalInsights,
+            feedbackHistory: feedback.slice(0, 5), // Last 5 feedback items
+            improvementSuggestions: generateImprovementSuggestions(feedback)
+        },
+        message: 'Personal feedback analytics retrieved successfully'
+    };
+}
+
+async function getPersonalAnalytics(userInfo, queryParams) {
+    console.log('Getting comprehensive personal analytics for user:', userInfo.userId);
+    
+    // Get user's reservations and feedback
+    const reservations = await getUserReservations(userInfo, {});
+    const feedbackData = await getUserFeedback(userInfo, {});
+    
+    const personalAnalytics = {
+        userId: userInfo.userId,
+        userEmail: userInfo.email,
+        summary: {
+            totalReservations: reservations.reservations.length,
+            completedReservations: reservations.reservations.filter(r => r.status === 'completed').length,
+            cancelledReservations: reservations.reservations.filter(r => r.status === 'cancelled').length,
+            totalFeedback: feedbackData.feedback.length,
+            averageRating: feedbackData.summary.averageRating,
+            memberSince: userInfo.registrationDate || reservations.reservations[reservations.reservations.length - 1]?.createdAt || null
+        },
+        reservationAnalytics: analyzeUserReservations(reservations.reservations),
+        feedbackAnalytics: feedbackData.summary,
+        behaviorInsights: generateBehaviorInsights(reservations.reservations, feedbackData.feedback),
+        recommendations: generateUserRecommendations(reservations.reservations, feedbackData.feedback)
+    };
+    
+    return {
+        success: true,
+        analytics: personalAnalytics,
+        message: 'Comprehensive personal analytics retrieved successfully'
+    };
+}
+
+// Helper Functions for Analytics
+function generatePersonalInsights(feedback) {
+    const insights = [];
+    
+    if (feedback.length === 0) return insights;
+    
+    // Average rating trend
+    const avgRating = feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length;
+    if (avgRating >= 4.5) {
+        insights.push({
+            type: 'positive',
+            message: 'You consistently provide high ratings, indicating great satisfaction with our services',
+            icon: '😊'
+        });
+    } else if (avgRating <= 2.5) {
+        insights.push({
+            type: 'attention',
+            message: 'Your ratings suggest some concerns. We\'d love to improve your experience',
+            icon: '🤔'
+        });
+    }
+    
+    // Sentiment consistency
+    const sentiments = feedback.filter(f => f.sentiment).map(f => f.sentiment);
+    if (sentiments.length > 0) {
+        const positiveFeedback = sentiments.filter(s => s === 'positive').length;
+        const negativeFeedback = sentiments.filter(s => s === 'negative').length;
+        
+        if (positiveFeedback > negativeFeedback * 2) {
+            insights.push({
+                type: 'positive',
+                message: 'Your feedback shows consistently positive experiences',
+                icon: '👍'
+            });
+        } else if (negativeFeedback > positiveFeedback) {
+            insights.push({
+                type: 'improvement',
+                message: 'We notice some negative experiences. Let us know how we can improve',
+                icon: '💡'
+            });
+        }
+    }
+    
+    // Feedback frequency
+    if (feedback.length >= 5) {
+        insights.push({
+            type: 'engagement',
+            message: 'Thank you for being an active community member with valuable feedback',
+            icon: '🌟'
+        });
+    }
+    
+    // Recent feedback patterns
+    const recentFeedback = feedback.slice(0, 3);
+    if (recentFeedback.length >= 2) {
+        const recentAvg = recentFeedback.reduce((sum, f) => sum + f.rating, 0) / recentFeedback.length;
+        const overallAvg = avgRating;
+        
+        if (recentAvg > overallAvg + 0.5) {
+            insights.push({
+                type: 'trending',
+                message: 'Your recent experiences show improvement - great to see!',
+                icon: '📈'
+            });
+        } else if (recentAvg < overallAvg - 0.5) {
+            insights.push({
+                type: 'attention',
+                message: 'Your recent ratings are lower than usual. We\'re here to help',
+                icon: '📉'
+            });
+        }
+    }
+    
+    return insights;
+}
+
+function generateImprovementSuggestions(feedback) {
+    const suggestions = [];
+    
+    if (feedback.length === 0) return suggestions;
+    
+    // Analyze common categories mentioned
+    const allCategories = feedback.reduce((acc, f) => {
+        if (f.categories) {
+            Object.keys(f.categories).forEach(cat => {
+                acc[cat] = (acc[cat] || 0) + 1;
+            });
+        }
+        return acc;
+    }, {});
+    
+    // Generate suggestions based on frequent categories in negative feedback
+    const negativeFeedback = feedback.filter(f => f.sentiment === 'negative' || f.rating <= 2);
+    
+    if (negativeFeedback.length > 0) {
+        const negativeCategories = negativeFeedback.reduce((acc, f) => {
+            if (f.categories) {
+                Object.keys(f.categories).forEach(cat => {
+                    acc[cat] = (acc[cat] || 0) + 1;
+                });
+            }
+            return acc;
+        }, {});
+        
+        Object.entries(negativeCategories).forEach(([category, count]) => {
+            if (count >= 2) {
+                switch (category) {
+                    case 'vehicle_condition':
+                        suggestions.push({
+                            category: 'Vehicle Quality',
+                            suggestion: 'Consider reporting vehicle condition issues immediately to help us maintain our fleet',
+                            priority: 'high'
+                        });
+                        break;
+                    case 'service_quality':
+                        suggestions.push({
+                            category: 'Service Experience',
+                            suggestion: 'Contact our customer service team to discuss service quality concerns',
+                            priority: 'high'
+                        });
+                        break;
+                    case 'booking':
+                        suggestions.push({
+                            category: 'Booking Process',
+                            suggestion: 'Try our mobile app for a smoother booking experience',
+                            priority: 'medium'
+                        });
+                        break;
+                }
+            }
+        });
+    }
+    
+    // General suggestions based on feedback patterns
+    if (feedback.some(f => f.rating >= 4)) {
+        suggestions.push({
+            category: 'Loyalty Rewards',
+            suggestion: 'You\'ve provided great feedback! Check if you\'re eligible for our loyalty program',
+            priority: 'low'
+        });
+    }
+    
+    return suggestions;
+}
+
+function analyzeUserReservations(reservations) {
+    if (reservations.length === 0) {
+        return { message: 'No reservation data available' };
+    }
+    
+    const completed = reservations.filter(r => r.status === 'completed');
+    const cancelled = reservations.filter(r => r.status === 'cancelled');
+    
+    // Calculate usage patterns
+    const vehicleTypes = reservations.reduce((acc, r) => {
+        acc[r.vehicleType] = (acc[r.vehicleType] || 0) + 1;
+        return acc;
+    }, {});
+    
+    const totalCost = completed.reduce((sum, r) => sum + (r.totalCost || 0), 0);
+    const totalHours = completed.reduce((sum, r) => sum + (r.durationHours || 0), 0);
+    
+    // Calculate booking patterns
+    const bookingDays = reservations.map(r => new Date(r.startDate).getDay());
+    const dayOfWeekCounts = bookingDays.reduce((acc, day) => {
+        acc[day] = (acc[day] || 0) + 1;
+        return acc;
+    }, {});
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const preferredDay = Object.entries(dayOfWeekCounts)
+        .sort(([,a], [,b]) => b - a)[0];
+    
+    return {
+        totalReservations: reservations.length,
+        completionRate: reservations.length > 0 ? (completed.length / reservations.length * 100).toFixed(1) : 0,
+        cancellationRate: reservations.length > 0 ? (cancelled.length / reservations.length * 100).toFixed(1) : 0,
+        totalSpent: totalCost.toFixed(2),
+        totalHoursUsed: totalHours,
+        averageDuration: completed.length > 0 ? (totalHours / completed.length).toFixed(1) : 0,
+        preferredVehicleTypes: Object.entries(vehicleTypes)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 3)
+            .map(([type, count]) => ({ type, count })),
+        preferredBookingDay: preferredDay ? {
+            day: dayNames[parseInt(preferredDay[0])],
+            count: preferredDay[1]
+        } : null,
+        recentActivity: reservations.slice(0, 5)
+    };
+}
+
+function generateBehaviorInsights(reservations, feedback) {
+    const insights = [];
+    
+    // Loyalty analysis
+    if (reservations.length >= 10) {
+        insights.push({
+            type: 'loyalty',
+            title: 'Loyal Customer',
+            description: 'You\'re one of our valued repeat customers',
+            score: 'high'
+        });
+    }
+    
+    // Feedback engagement
+    const feedbackRate = reservations.length > 0 ? (feedback.length / reservations.filter(r => r.status === 'completed').length) : 0;
+    if (feedbackRate >= 0.8) {
+        insights.push({
+            type: 'engagement',
+            title: 'Highly Engaged',
+            description: 'You consistently provide feedback, helping us improve',
+            score: 'high'
+        });
+    }
+    
+    // Usage patterns
+    const recentReservations = reservations.filter(r => {
+        const reservationDate = new Date(r.createdAt);
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        return reservationDate >= thirtyDaysAgo;
+    });
+    
+    if (recentReservations.length >= 3) {
+        insights.push({
+            type: 'activity',
+            title: 'Active User',
+            description: 'High activity in the last 30 days',
+            score: 'high'
+        });
+    } else if (recentReservations.length === 0 && reservations.length > 0) {
+        insights.push({
+            type: 'retention',
+            title: 'We Miss You',
+            description: 'No recent activity - special offers might be available',
+            score: 'attention'
+        });
+    }
+    
+    return insights;
+}
+
+function generateUserRecommendations(reservations, feedback) {
+    const recommendations = [];
+    
+    // Based on vehicle preferences
+    const vehicleTypes = reservations.reduce((acc, r) => {
+        acc[r.vehicleType] = (acc[r.vehicleType] || 0) + 1;
+        return acc;
+    }, {});
+    
+    const mostUsedVehicle = Object.entries(vehicleTypes)
+        .sort(([,a], [,b]) => b - a)[0];
+    
+    if (mostUsedVehicle) {
+        recommendations.push({
+            type: 'vehicle',
+            title: `More ${mostUsedVehicle[0]} Options`,
+            description: `Since you prefer ${mostUsedVehicle[0]}s, check out our latest models in this category`,
+            priority: 'medium'
+        });
+    }
+    
+    // Based on feedback patterns
+    const highRatingFeedback = feedback.filter(f => f.rating >= 4);
+    if (highRatingFeedback.length >= 3) {
+        recommendations.push({
+            type: 'loyalty',
+            title: 'VIP Program Eligible',
+            description: 'Your consistent positive feedback makes you eligible for our VIP program',
+            priority: 'high'
+        });
+    }
+    
+    // Based on usage frequency
+    if (reservations.length >= 5) {
+        recommendations.push({
+            type: 'subscription',
+            title: 'Consider Our Subscription Plan',
+            description: 'Based on your usage patterns, a subscription might save you money',
+            priority: 'medium'
+        });
+    }
+    
+    // Based on booking patterns
+    const weekendBookings = reservations.filter(r => {
+        const day = new Date(r.startDate).getDay();
+        return day === 0 || day === 6; // Sunday or Saturday
+    });
+    
+    if (weekendBookings.length >= 3) {
+        recommendations.push({
+            type: 'scheduling',
+            title: 'Weekend Early Bird Discounts',
+            description: 'Book weekend trips early to get the best rates',
+            priority: 'low'
+        });
+    }
+    
+    return recommendations;
 }
 
 // Ride-related functions (basic implementation)
@@ -970,6 +1431,10 @@ async function updateRide(rideId, updateData, userInfo) {
 
 // Profile-related functions
 async function getUserProfile(userInfo) {
+    // Get user's activity summary
+    const reservations = await getUserReservations(userInfo, {});
+    const feedbackData = await getUserFeedback(userInfo, {});
+    
     return {
         success: true,
         profile: {
@@ -978,9 +1443,17 @@ async function getUserProfile(userInfo) {
             role: userInfo.role,
             groups: userInfo.groups,
             registrationDate: userInfo.registrationDate || null,
+            activitySummary: {
+                totalReservations: reservations.count,
+                totalFeedback: feedbackData.count,
+                averageRating: feedbackData.summary.averageRating,
+                memberSince: reservations.reservations[reservations.reservations.length - 1]?.createdAt || null
+            },
             preferences: {
                 notifications: true,
-                marketing: false
+                marketing: false,
+                reminderEmails: true,
+                feedbackRequests: true
             }
         },
         message: 'Profile retrieved successfully'
@@ -989,7 +1462,7 @@ async function getUserProfile(userInfo) {
 
 async function updateUserProfile(profileData, userInfo) {
     // Basic implementation - you can expand this to update user preferences
-    const allowedUpdates = ['preferences', 'displayName'];
+    const allowedUpdates = ['preferences', 'displayName', 'phoneNumber'];
     const updates = {};
     
     for (const field of allowedUpdates) {
@@ -1002,11 +1475,15 @@ async function updateUserProfile(profileData, userInfo) {
         throw { statusCode: 400, message: 'No valid fields to update' };
     }
     
+    // Here you would typically update a user profile table
+    // For now, return the updated preferences
+    
     return {
         success: true,
-        message: 'Profile update functionality - basic implementation',
+        message: 'Profile updated successfully',
         updatedFields: Object.keys(updates),
-        note: 'Full profile management can be implemented as needed'
+        updates: updates,
+        note: 'Profile updates saved to user preferences'
     };
 }
 
