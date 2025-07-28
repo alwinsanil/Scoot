@@ -5,6 +5,7 @@ import QnA from './pages/auth/QnA';
 import Owner from './pages/Owner';
 import User from './pages/User';
 import FeedbackSentimentDisplay from './pages/Feedback';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/owner" element={<Owner />} />
         <Route path="/feedback" element={<FeedbackSentimentDisplay />} />
         <Route path="/auth/cipher/callback" element={<Cipher />} />
+        <Route path="/analytics" element={<AnalyticsDashboard />} />
       </Routes>
     </BrowserRouter>
   );

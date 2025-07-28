@@ -42,8 +42,8 @@ resource "aws_cloudwatch_log_group" "auth_lambda_logs" {
 
 # Lambda function
 resource "aws_lambda_function" "guest_api" {
-  filename      = "${path.module}/guest-api.zip"
-  
+  filename = "${path.module}/guest-api.zip"
+
   function_name = "${var.project_name}-${var.environment}-guest-api"
   role          = var.lambda_role_arn
   handler       = "guest-api.lambdaHandler"
@@ -131,6 +131,7 @@ resource "aws_lambda_function" "owner_api" {
       ENVIRONMENT          = var.environment
       LOG_LEVEL            = "INFO"
       COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+      USER_POOL_CLIENT_ID  = var.cognito_client_id
       REGION               = var.aws_region
     }
   }
