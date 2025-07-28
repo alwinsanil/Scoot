@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Clock, MapPin, Battery, Star, Filter, X, Plus, Edit, Trash2, Eye, Car, Bike, AlertCircle, MessageSquare, ThumbsUp, ThumbsDown, Send, CheckCircle, ChevronDown, ChevronUp, Users, BarChart3, LogIn, LogOut } from 'lucide-react';
-import { redirectBaseUri } from '../contants/constants';
+import { redirectBaseUri,cognitoConfig } from '../contants/constants';
 
 const User = () => {
   // State management
@@ -17,7 +17,8 @@ const User = () => {
   const [analyticsFilters, setAnalyticsFilters] = useState({
     sentiment: '',
     rating: '',
-    severity: ''
+    severity: '',
+    vehicleId: ''  
   });
 
   // Modal states
@@ -149,6 +150,8 @@ const User = () => {
     }
   };
 
+
+
   const createReservation = async (reservationData) => {
     setLoading(true);
     try {
@@ -225,7 +228,7 @@ const User = () => {
 
       const response = await fetch(`${API_BASE_URL}/guest/feedback?${queryParams.toString()}`);
       const data = await response.json();
-
+      console.log('Feedback data:', data);
       setFeedbackAnalytics(data.feedback || []);
       setAnalyticsData(data.analytics || null);
     } catch (error) {
@@ -235,16 +238,31 @@ const User = () => {
     }
   };
 
+  const deleteFeedback = async (feedbackId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/feedback/${feedbackId}`, {
+        method: 'DELETE',
+        headers: getApiHeaders(true)
+      });
+      if (!response.ok) throw new Error('Failed to delete feedback');
+      return await response.json();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Event Handlers
   const handleLogin = () => window.location.href = '/auth';
 
   const handleLogout = () => {
-    sessionStorage.removeItem('jwt');
-    setIsAuthenticated(false);
-    setActiveTab('browse');
-    setReservations([]);
-    setFeedback([]);
-    alert('Signed out successfully');
+    // Clear any stored tokens/session data
+    sessionStorage.clear();
+    localStorage.clear();
+
+    // Redirect to Cognito logout
+    const logoutUrl = `${cognitoConfig.logoutUrl}?client_id=${cognitoConfig.clientId}&logout_uri=${encodeURIComponent(window.location.origin)}`;
+    window.location.href = logoutUrl;
   };
 
   const handleReserveClick = (vehicle) => {
@@ -263,7 +281,8 @@ const User = () => {
     setAnalyticsFilters({
       sentiment: '',
       rating: '',
-      severity: ''
+      severity: '',
+      vehicleId: vehicle.vehicleId
     });
     setShowFeedbackAnalyticsModal(true);
   };
@@ -995,6 +1014,23 @@ const User = () => {
                         <div className="flex items-center space-x-2 mb-2">
                           {renderStars(item.rating)}
                           <span className="text-sm font-medium">{item.rating}/5</span>
+                          <button
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to delete this feedback?')) {
+                                try {
+                                  await deleteFeedback(item.feedbackId);
+                                  loadFeedback();
+                                  alert('Feedback deleted successfully');
+                                } catch (err) {
+                                  alert('Error deleting feedback: ' + err.message);
+                                }
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-800 ml-2"
+                            title="Delete Feedback"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                         <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
                           {feedbackCategories.find(cat => cat.value === item.category)?.label || item.category}
@@ -1175,22 +1211,6 @@ const User = () => {
                                 {item.sentimentAnalysis?.sentiment || 'UNKNOWN'}
                               </span>
                             </div>
-
-                            {item.sentimentAnalysis?.emotions && item.sentimentAnalysis.emotions.length > 0 && (
-                              <div className="flex items-center space-x-2">
-                                <span className="text-xs text-gray-500">Emotions:</span>
-                                <div className="flex space-x-1">
-                                  {item.sentimentAnalysis.emotions.slice(0, 2).map((emotion, idx) => {
-                                    const emotionName = typeof emotion === 'object' ? emotion.emotion : emotion;
-                                    return (
-                                      <span key={idx} className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">
-                                        {emotionName}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
                           </div>
 
                           <div className="flex items-center space-x-3">

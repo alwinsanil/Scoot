@@ -733,7 +733,7 @@ async function submitFeedbackWithAnalysis(feedbackData, userInfo) {
         throw { statusCode: 409, message: 'Feedback already exists for this reservation' };
     }
 
-    // Use the enhanced feedback service for sentiment analysis
+    // Use the enhanced feedback service for sentiment analysis (emotions removed)
     const result = await feedbackService.submitFeedback(feedbackData, userInfo);
     
     return result;
@@ -906,7 +906,7 @@ async function updateFeedbackWithAnalysis(feedbackId, updateData, userInfo) {
             sentimentUpdate = {
                 sentiment: analysis.sentiment,
                 sentimentConfidence: analysis.confidence,
-                emotions: analysis.emotions,
+                // emotions removed
                 keywords: analysis.keywords,
                 categories: analysis.categories,
                 severity: analysis.severity,
