@@ -7,7 +7,7 @@ const VEHICLES_TABLE = process.env.VEHICLES_TABLE || 'franchise-vehicles';
 
 exports.lambdaHandler = async (event) => {
     console.log('Event received:', JSON.stringify(event, null, 2));
-    
+
     const path = event.path || '/';
     const httpMethod = event.httpMethod || 'UNKNOWN';
     const queryParams = event.queryStringParameters || {};
@@ -43,7 +43,7 @@ exports.lambdaHandler = async (event) => {
 
     // Extract user info from JWT token
     const userInfo = extractUserInfo(headers);
-    
+
     if (!userInfo.isAuthenticated) {
         return {
             statusCode: 401,
@@ -67,7 +67,7 @@ exports.lambdaHandler = async (event) => {
     }
 
     let responseBody;
-    
+
     try {
         // Check if this is an analytics endpoint
         if (path.includes('/analytics')) {
@@ -76,7 +76,7 @@ exports.lambdaHandler = async (event) => {
             // Handle vehicle endpoints
             responseBody = await handleVehicleRequest(path, httpMethod, queryParams, bodyJson, userInfo);
         }
-        
+
         return {
             statusCode: 200,
             headers: getCorsHeaders(),
@@ -84,7 +84,7 @@ exports.lambdaHandler = async (event) => {
         };
     } catch (error) {
         console.error('Error handling request:', error);
-        
+
         return {
             statusCode: error.statusCode || 500,
             headers: getCorsHeaders(),
@@ -105,14 +105,14 @@ function extractUserInfo(headers) {
 
         const token = authHeader.replace('Bearer ', '');
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-        
+
         const userId = payload.sub;
         const email = payload.email;
         const groups = payload['cognito:groups'] || [];
-        
+
         const isOwner = groups.includes('owners') || groups.includes('admins') || groups.includes('franchise-operators');
         const isAdmin = groups.includes('admins');
-        
+
         return {
             isAuthenticated: true,
             userId: userId,
@@ -131,12 +131,12 @@ function extractUserInfo(headers) {
 // NEW: Handle analytics requests
 async function handleAnalyticsRequest(path, method, queryParams, userInfo) {
     console.log('Processing analytics request:', { path, method, queryParams });
-    
+
     // Only allow GET requests for analytics
     if (method !== 'GET') {
         throw { statusCode: 405, message: `Method ${method} not allowed for analytics endpoints` };
     }
-    
+
     // Route analytics endpoints
     if (path.includes('/analytics/dashboard')) {
         return await analyticsUtils.getDashboardData(queryParams, userInfo);
@@ -151,28 +151,28 @@ async function handleAnalyticsRequest(path, method, queryParams, userInfo) {
 
 async function handleVehicleRequest(path, method, queryParams, body, userInfo) {
     console.log('Processing vehicle request:', { path, method, queryParams });
-    
+
     // Split path and remove empty parts
     const pathParts = path.split('/').filter(part => part);
-    
+
     console.log('Path parts:', pathParts);
-    
+
     // Parse vehicle request paths
     let userType, endpoint, vehicleId;
-    
+
     if (pathParts.includes('owner') && pathParts.includes('vehicles')) {
         const ownerIndex = pathParts.indexOf('owner');
         const vehiclesIndex = pathParts.indexOf('vehicles');
-        
+
         if (vehiclesIndex === ownerIndex + 1) {
             userType = 'owner';
             endpoint = 'vehicles';
             vehicleId = pathParts[vehiclesIndex + 1]; // might be undefined
         }
     }
-    
+
     console.log('Route components:', { userType, endpoint, vehicleId });
-    
+
     if (userType !== 'owner' || endpoint !== 'vehicles') {
         throw { statusCode: 404, message: 'Endpoint not found' };
     }
@@ -184,22 +184,22 @@ async function handleVehicleRequest(path, method, queryParams, body, userInfo) {
             } else {
                 return await getAllVehicles(userInfo, queryParams);
             }
-        
+
         case 'POST':
             return await createVehicle(body, userInfo);
-        
+
         case 'PUT':
             if (!vehicleId) {
                 throw { statusCode: 400, message: 'Vehicle ID is required for updates' };
             }
             return await updateVehicle(vehicleId, body, userInfo);
-        
+
         case 'DELETE':
             if (!vehicleId) {
                 throw { statusCode: 400, message: 'Vehicle ID is required for deletion' };
             }
             return await deleteVehicle(vehicleId, userInfo);
-        
+
         default:
             throw { statusCode: 405, message: `Method ${method} not allowed` };
     }
@@ -207,7 +207,7 @@ async function handleVehicleRequest(path, method, queryParams, body, userInfo) {
 
 async function getAllVehicles(userInfo, queryParams) {
     console.log('Getting all vehicles for user:', userInfo.userId);
-    
+
     const params = {
         TableName: VEHICLES_TABLE,
         FilterExpression: 'ownerId = :ownerId',
@@ -229,7 +229,7 @@ async function getAllVehicles(userInfo, queryParams) {
     }
 
     const result = await dynamodb.scan(params).promise();
-    
+
     return {
         success: true,
         vehicles: result.Items || [],
@@ -240,7 +240,7 @@ async function getAllVehicles(userInfo, queryParams) {
 
 async function getVehicle(vehicleId, userInfo) {
     console.log('Getting vehicle:', vehicleId, 'for user:', userInfo.userId);
-    
+
     const params = {
         TableName: VEHICLES_TABLE,
         Key: {
@@ -250,7 +250,7 @@ async function getVehicle(vehicleId, userInfo) {
     };
 
     const result = await dynamodb.get(params).promise();
-    
+
     if (!result.Item) {
         throw { statusCode: 404, message: 'Vehicle not found' };
     }
@@ -264,7 +264,7 @@ async function getVehicle(vehicleId, userInfo) {
 
 async function createVehicle(vehicleData, userInfo) {
     console.log('Creating vehicle:', vehicleData, 'for user:', userInfo.userId);
-    
+
     // Validate required fields
     const requiredFields = ['vehicleType', 'model', 'accessCode', 'hourlyRate', 'batteryLife'];
     for (const field of requiredFields) {
@@ -297,7 +297,7 @@ async function createVehicle(vehicleData, userInfo) {
         accessCode: vehicleData.accessCode.toString().trim().toUpperCase(),
         hourlyRate: parseFloat(vehicleData.hourlyRate),
         batteryLife: parseInt(vehicleData.batteryLife),
-        
+
         // Features with defaults
         features: {
             heightAdjustment: vehicleData.features?.heightAdjustment || false,
@@ -308,16 +308,16 @@ async function createVehicle(vehicleData, userInfo) {
             bluetooth: vehicleData.features?.bluetooth || false,
             speedModes: vehicleData.features?.speedModes || false
         },
-        
+
         // Optional discount fields
         discountCode: vehicleData.discountCode ? vehicleData.discountCode.toString().trim().toUpperCase() : null,
         discountPercentage: vehicleData.discountPercentage ? parseInt(vehicleData.discountPercentage) : 0,
-        
+
         // Status and location
         status: vehicleData.status || 'available',
         location: vehicleData.location ? vehicleData.location.trim() : null,
         lastMaintenance: vehicleData.lastMaintenance || null,
-        
+
         // Timestamps and metrics
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -357,10 +357,10 @@ async function createVehicle(vehicleData, userInfo) {
 
 async function updateVehicle(vehicleId, updateData, userInfo) {
     console.log('Updating vehicle:', vehicleId, 'with data:', updateData, 'for user:', userInfo.userId);
-    
+
     // First check if vehicle exists and belongs to user
     const existingVehicle = await getVehicle(vehicleId, userInfo);
-    
+    const reservedFields = ['status', 'location'];
     // Check if access code is being changed and if new code already exists
     if (updateData.accessCode && updateData.accessCode !== existingVehicle.vehicle.accessCode) {
         const existingWithCode = await checkAccessCodeExists(updateData.accessCode, userInfo.userId, vehicleId);
@@ -370,142 +370,158 @@ async function updateVehicle(vehicleId, updateData, userInfo) {
     }
 
     const timestamp = new Date().toISOString();
-    
+
     let updateExpression = 'SET updatedAt = :updatedAt';
     let expressionAttributeValues = {
         ':updatedAt': timestamp
     };
+    let expressionAttributeNames = {};
+
 
     // Fields that can be updated directly
     const updatableFields = [
-        'model', 'accessCode', 'hourlyRate', 'batteryLife', 'status', 
+        'model', 'accessCode', 'hourlyRate', 'batteryLife', 'status',
         'discountCode', 'discountPercentage', 'location', 'lastMaintenance'
     ];
 
     updatableFields.forEach(field => {
         if (updateData[field] !== undefined) {
-            updateExpression += `, ${field} = :${field}`;
+            let fieldKey = field;
+
+            // Use ExpressionAttributeNames if field is reserved
+            if (reservedFields.includes(field)) {
+                const alias = `#${field}`;
+                expressionAttributeNames[alias] = field;
+                fieldKey = alias;
+            }
+
+            updateExpression += `, ${fieldKey} = :${field}`;
             let value = updateData[field];
+
             // Type conversions and validations
-           if (field === 'hourlyRate') {
-               value = parseFloat(value);
-               if (value <= 0) {
-                   throw { statusCode: 400, message: 'Hourly rate must be greater than 0' };
-               }
-           } else if (field === 'batteryLife') {
-               value = parseInt(value);
-               if (value <= 0) {
-                   throw { statusCode: 400, message: 'Battery life must be greater than 0' };
-               }
-           } else if (field === 'discountPercentage') {
-               value = parseInt(value);
-               if (value < 0 || value > 100) {
-                   throw { statusCode: 400, message: 'Discount percentage must be between 0 and 100' };
-               }
-           } else if (field === 'accessCode' || field === 'discountCode') {
-               value = value ? value.toString().trim().toUpperCase() : value;
-           } else if (field === 'model' || field === 'location') {
-               value = value ? value.toString().trim() : value;
-           }
-           
-           expressionAttributeValues[`:${field}`] = value;
-       }
-   });
+            if (field === 'hourlyRate') {
+                value = parseFloat(value);
+                if (value <= 0) {
+                    throw { statusCode: 400, message: 'Hourly rate must be greater than 0' };
+                }
+            } else if (field === 'batteryLife') {
+                value = parseInt(value);
+                if (value <= 0) {
+                    throw { statusCode: 400, message: 'Battery life must be greater than 0' };
+                }
+            } else if (field === 'discountPercentage') {
+                value = parseInt(value);
+                if (value < 0 || value > 100) {
+                    throw { statusCode: 400, message: 'Discount percentage must be between 0 and 100' };
+                }
+            } else if (field === 'accessCode' || field === 'discountCode') {
+                value = value ? value.toString().trim().toUpperCase() : value;
+            } else if (field === 'model' || field === 'location') {
+                value = value ? value.toString().trim() : value;
+            }
 
-   // Handle features separately since it's an object
-   if (updateData.features) {
-       updateExpression += ', features = :features';
-       expressionAttributeValues[':features'] = {
-           heightAdjustment: updateData.features.heightAdjustment || false,
-           gpsTracking: updateData.features.gpsTracking !== false,
-           antiTheft: updateData.features.antiTheft !== false,
-           ledLights: updateData.features.ledLights || false,
-           phoneHolder: updateData.features.phoneHolder || false,
-           bluetooth: updateData.features.bluetooth || false,
-           speedModes: updateData.features.speedModes || false
-       };
-   }
+            expressionAttributeValues[`:${field}`] = value;
+        }
+    });
 
-   const params = {
-       TableName: VEHICLES_TABLE,
-       Key: {
-           vehicleId: vehicleId,
-           ownerId: userInfo.userId
-       },
-       UpdateExpression: updateExpression,
-       ExpressionAttributeValues: expressionAttributeValues,
-       ReturnValues: 'ALL_NEW'
-   };
 
-   const result = await dynamodb.update(params).promise();
+    // Handle features separately since it's an object
+    if (updateData.features) {
+        updateExpression += ', features = :features';
+        expressionAttributeValues[':features'] = {
+            heightAdjustment: updateData.features.heightAdjustment || false,
+            gpsTracking: updateData.features.gpsTracking !== false,
+            antiTheft: updateData.features.antiTheft !== false,
+            ledLights: updateData.features.ledLights || false,
+            phoneHolder: updateData.features.phoneHolder || false,
+            bluetooth: updateData.features.bluetooth || false,
+            speedModes: updateData.features.speedModes || false
+        };
+    }
 
-   return {
-       success: true,
-       vehicle: result.Attributes,
-       message: 'Vehicle updated successfully'
-   };
+    const params = {
+        TableName: VEHICLES_TABLE,
+        Key: {
+            vehicleId: vehicleId,
+            ownerId: userInfo.userId
+        },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ExpressionAttributeNames: Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
+        ReturnValues: 'ALL_NEW'
+    };
+
+
+
+    const result = await dynamodb.update(params).promise();
+
+    return {
+        success: true,
+        vehicle: result.Attributes,
+        message: 'Vehicle updated successfully'
+    };
 }
 
 async function deleteVehicle(vehicleId, userInfo) {
-   console.log('Deleting vehicle:', vehicleId, 'for user:', userInfo.userId);
-   
-   // First check if vehicle exists and get its current status
-   const vehicle = await getVehicle(vehicleId, userInfo);
-   
-   if (vehicle.vehicle.status === 'rented') {
-       throw { statusCode: 400, message: 'Cannot delete vehicle that is currently rented' };
-   }
+    console.log('Deleting vehicle:', vehicleId, 'for user:', userInfo.userId);
 
-   const params = {
-       TableName: VEHICLES_TABLE,
-       Key: {
-           vehicleId: vehicleId,
-           ownerId: userInfo.userId
-       },
-       ReturnValues: 'ALL_OLD'
-   };
+    // First check if vehicle exists and get its current status
+    const vehicle = await getVehicle(vehicleId, userInfo);
 
-   const result = await dynamodb.delete(params).promise();
+    if (vehicle.vehicle.status === 'rented') {
+        throw { statusCode: 400, message: 'Cannot delete vehicle that is currently rented' };
+    }
 
-   if (!result.Attributes) {
-       throw { statusCode: 404, message: 'Vehicle not found' };
-   }
+    const params = {
+        TableName: VEHICLES_TABLE,
+        Key: {
+            vehicleId: vehicleId,
+            ownerId: userInfo.userId
+        },
+        ReturnValues: 'ALL_OLD'
+    };
 
-   return {
-       success: true,
-       deletedVehicle: result.Attributes,
-       message: 'Vehicle deleted successfully'
-   };
+    const result = await dynamodb.delete(params).promise();
+
+    if (!result.Attributes) {
+        throw { statusCode: 404, message: 'Vehicle not found' };
+    }
+
+    return {
+        success: true,
+        deletedVehicle: result.Attributes,
+        message: 'Vehicle deleted successfully'
+    };
 }
 
 async function checkAccessCodeExists(accessCode, ownerId, excludeVehicleId = null) {
-   const params = {
-       TableName: VEHICLES_TABLE,
-       FilterExpression: 'ownerId = :ownerId AND accessCode = :accessCode',
-       ExpressionAttributeValues: {
-           ':ownerId': ownerId,
-           ':accessCode': accessCode.toString().trim().toUpperCase()
-       }
-   };
+    const params = {
+        TableName: VEHICLES_TABLE,
+        FilterExpression: 'ownerId = :ownerId AND accessCode = :accessCode',
+        ExpressionAttributeValues: {
+            ':ownerId': ownerId,
+            ':accessCode': accessCode.toString().trim().toUpperCase()
+        }
+    };
 
-   if (excludeVehicleId) {
-       params.FilterExpression += ' AND vehicleId <> :excludeVehicleId';
-       params.ExpressionAttributeValues[':excludeVehicleId'] = excludeVehicleId;
-   }
+    if (excludeVehicleId) {
+        params.FilterExpression += ' AND vehicleId <> :excludeVehicleId';
+        params.ExpressionAttributeValues[':excludeVehicleId'] = excludeVehicleId;
+    }
 
-   const result = await dynamodb.scan(params).promise();
-   return result.Items && result.Items.length > 0;
+    const result = await dynamodb.scan(params).promise();
+    return result.Items && result.Items.length > 0;
 }
 
 function generateVehicleId() {
-   return 'vehicle_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+    return 'vehicle_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
 }
 
 function getCorsHeaders() {
-   return {
-       'Content-Type': 'application/json',
-       'Access-Control-Allow-Origin': '*',
-       'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-       'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
-   };
+    return {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
+    };
 }
