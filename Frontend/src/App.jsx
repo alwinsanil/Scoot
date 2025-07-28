@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Home from './pages/home/Home';
 import Auth from './pages/auth/Auth';
 import Cipher from './pages/auth/Cipher';
 import QnA from './pages/auth/QnA';
@@ -11,11 +10,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<User />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/auth/qna/callback" element={<QnA />} />
         <Route path="/owner" element={<Owner />} />
-        <Route path="/user" element={<User />} />
         <Route path="/feedback" element={<FeedbackSentimentDisplay />} />
         <Route path="/auth/cipher/callback" element={<Cipher />} />
       </Routes>
