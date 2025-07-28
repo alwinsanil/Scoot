@@ -39,20 +39,11 @@ resource "aws_cloudwatch_log_group" "auth_lambda_logs" {
 }
 
 # guest-api
-# Create deployment package
-data "archive_file" "guest_lambda_zip" {
-  type        = "zip"
-  output_path = "${path.module}/guest-api.zip"
-
-  source {
-    content  = file("${path.module}../../../../Backend/Routes/guest-api.js")
-    filename = "guest-api.js"
-  }
-}
 
 # Lambda function
 resource "aws_lambda_function" "guest_api" {
-  filename      = data.archive_file.guest_lambda_zip.output_path
+  filename      = "${path.module}/guest-api.zip"
+  
   function_name = "${var.project_name}-${var.environment}-guest-api"
   role          = var.lambda_role_arn
   handler       = "guest-api.lambdaHandler"
@@ -60,7 +51,7 @@ resource "aws_lambda_function" "guest_api" {
   timeout       = 30
   memory_size   = 128
 
-  source_code_hash = data.archive_file.guest_lambda_zip.output_base64sha256
+  source_code_hash = filebase64sha256("${path.module}/guest-api.zip")
 
   environment {
     variables = {

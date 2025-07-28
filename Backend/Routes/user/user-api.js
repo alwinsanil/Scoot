@@ -7,7 +7,7 @@ const RESERVATIONS_TABLE = process.env.RESERVATIONS_TABLE || 'vehicle-reservatio
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE || 'vehicle-feedback';
 
 exports.lambdaHandler = async (event) => {
-    console.log('Event received:', JSON.stringify(event, null, 2));
+    console.log('User API Event received:', JSON.stringify(event, null, 2));
     
     const path = event.path || '/';
     const httpMethod = event.httpMethod || 'UNKNOWN';
@@ -67,7 +67,7 @@ exports.lambdaHandler = async (event) => {
             body: JSON.stringify(responseBody, null, 2),
         };
     } catch (error) {
-        console.error('Error handling request:', error);
+        console.error('Error handling user request:', error);
         
         return {
             statusCode: error.statusCode || 500,
@@ -123,7 +123,7 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
     if (pathParts.includes('user')) {
         const userIndex = pathParts.indexOf('user');
         userType = 'user';
-        endpoint = pathParts[userIndex + 1]; // scooters, rides, profile, feedback, etc.
+        endpoint = pathParts[userIndex + 1]; // reservations, feedback, profile, rides, etc.
         resourceId = pathParts[userIndex + 2]; // specific ID if present
     }
     
@@ -134,10 +134,6 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
     }
 
     switch (endpoint) {
-        case 'scooters':
-        case 'vehicles':
-            return await handleVehicleEndpoint(method, resourceId, queryParams, body, userInfo);
-        
         case 'reservations':
             return await handleReservationEndpoint(method, resourceId, queryParams, body, userInfo);
         
@@ -153,38 +149,31 @@ async function handleUserRequest(path, method, queryParams, body, userInfo) {
         default:
             return {
                 success: true,
-                message: 'User API endpoints',
+                message: 'User API endpoints - Authenticated actions only',
+                note: 'Vehicle browsing and reviews are now available via guest API',
                 availableEndpoints: {
-                    'GET /user/vehicles': 'List available vehicles for rent',
-                    'GET /user/vehicles/{id}': 'Get specific vehicle details',
                     'POST /user/reservations': 'Create a new reservation',
                     'GET /user/reservations': 'Get user reservations',
+                    'GET /user/reservations/{id}': 'Get specific reservation',
                     'PUT /user/reservations/{id}': 'Update reservation',
                     'DELETE /user/reservations/{id}': 'Cancel reservation',
                     'POST /user/feedback': 'Submit feedback for a completed ride',
                     'GET /user/feedback': 'Get user feedback history',
                     'GET /user/feedback/{id}': 'Get specific feedback',
+                    'PUT /user/feedback/{id}': 'Update feedback',
+                    'DELETE /user/feedback/{id}': 'Delete feedback',
                     'POST /user/rides': 'Start a ride from reservation',
                     'GET /user/rides': 'Get ride history',
                     'PUT /user/rides/{id}': 'Update ride status',
                     'GET /user/profile': 'Get user profile',
                     'PUT /user/profile': 'Update user profile'
+                },
+                publicEndpoints: {
+                    'GET /guest/vehicles': 'Browse available vehicles (no auth required)',
+                    'GET /guest/vehicles/{id}': 'Get vehicle details (no auth required)',
+                    'GET /guest/vehicles/{id}/reviews': 'Get vehicle reviews (no auth required)'
                 }
             };
-    }
-}
-
-async function handleVehicleEndpoint(method, vehicleId, queryParams, body, userInfo) {
-    switch (method) {
-        case 'GET':
-            if (vehicleId) {
-                return await getAvailableVehicle(vehicleId);
-            } else {
-                return await getAvailableVehicles(queryParams);
-            }
-        
-        default:
-            throw { statusCode: 405, message: `Method ${method} not allowed for vehicles endpoint` };
     }
 }
 
@@ -286,104 +275,25 @@ async function handleProfileEndpoint(method, resourceId, queryParams, body, user
     }
 }
 
-// Vehicle-related functions
-async function getAvailableVehicles(queryParams) {
-    console.log('Getting available vehicles with filters:', queryParams);
+// Helper function to get vehicle details (for reservation validation)
+async function getVehicleForReservation(vehicleId) {
+    console.log('Getting vehicle for reservation validation:', vehicleId);
     
     const params = {
         TableName: VEHICLES_TABLE,
-        FilterExpression: '#status = :status',
-        ExpressionAttributeNames: {
-            '#status': 'status'
-        },
+        FilterExpression: 'vehicleId = :vehicleId',
         ExpressionAttributeValues: {
-            ':status': 'available'
-        }
-    };
-
-    // Add optional filters
-    if (queryParams.type) {
-        params.FilterExpression += ' AND vehicleType = :type';
-        params.ExpressionAttributeValues[':type'] = queryParams.type;
-    }
-
-    if (queryParams.location) {
-        params.FilterExpression += ' AND contains(#location, :location)';
-        params.ExpressionAttributeNames['#location'] = 'location';
-        params.ExpressionAttributeValues[':location'] = queryParams.location;
-    }
-
-    if (queryParams.maxRate) {
-        params.FilterExpression += ' AND hourlyRate <= :maxRate';
-        params.ExpressionAttributeValues[':maxRate'] = parseFloat(queryParams.maxRate);
-    }
-
-    const result = await dynamodb.scan(params).promise();
-    
-    // Remove sensitive owner information but keep necessary details
-    const publicVehicles = result.Items.map(vehicle => ({
-        vehicleId: vehicle.vehicleId,
-        vehicleType: vehicle.vehicleType,
-        model: vehicle.model,
-        hourlyRate: vehicle.hourlyRate,
-        batteryLife: vehicle.batteryLife,
-        features: vehicle.features,
-        location: vehicle.location,
-        discountCode: vehicle.discountCode,
-        discountPercentage: vehicle.discountPercentage,
-        status: vehicle.status
-    }));
-    
-    return {
-        success: true,
-        vehicles: publicVehicles,
-        count: publicVehicles.length,
-        message: 'Available vehicles retrieved successfully'
-    };
-}
-
-async function getAvailableVehicle(vehicleId) {
-    console.log('Getting vehicle:', vehicleId);
-    
-    const params = {
-        TableName: VEHICLES_TABLE,
-        FilterExpression: 'vehicleId = :vehicleId AND #status = :status',
-        ExpressionAttributeNames: {
-            '#status': 'status'
-        },
-        ExpressionAttributeValues: {
-            ':vehicleId': vehicleId,
-            ':status': 'available'
+            ':vehicleId': vehicleId
         }
     };
 
     const result = await dynamodb.scan(params).promise();
     
     if (!result.Items || result.Items.length === 0) {
-        throw { statusCode: 404, message: 'Vehicle not found or not available' };
+        throw { statusCode: 404, message: 'Vehicle not found' };
     }
 
-    const vehicle = result.Items[0];
-    
-    // Remove sensitive owner information
-    const publicVehicle = {
-        vehicleId: vehicle.vehicleId,
-        vehicleType: vehicle.vehicleType,
-        model: vehicle.model,
-        hourlyRate: vehicle.hourlyRate,
-        batteryLife: vehicle.batteryLife,
-        features: vehicle.features,
-        location: vehicle.location,
-        discountCode: vehicle.discountCode,
-        discountPercentage: vehicle.discountPercentage,
-        status: vehicle.status
-    };
-
-    return {
-        success: true,
-        vehicle: publicVehicle,
-        message: 'Vehicle retrieved successfully'
-    };
+    return result.Items[0];
 }
 
 // Reservation-related functions
@@ -415,8 +325,12 @@ async function createReservation(reservationData, userInfo) {
         throw { statusCode: 400, message: 'Start date cannot be in the past' };
     }
 
-    // Check if vehicle exists and is available
-    const vehicle = await getAvailableVehicle(reservationData.vehicleId);
+    // Check if vehicle exists and get its details
+    const vehicle = await getVehicleForReservation(reservationData.vehicleId);
+    
+    if (vehicle.status !== 'available') {
+        throw { statusCode: 409, message: 'Vehicle is not available for reservation' };
+    }
     
     // Check for conflicting reservations
     const hasConflicts = await checkReservationConflicts(
@@ -431,13 +345,13 @@ async function createReservation(reservationData, userInfo) {
 
     // Calculate total cost
     const durationHours = Math.ceil((endDate - startDate) / (1000 * 60 * 60));
-    let totalCost = durationHours * vehicle.vehicle.hourlyRate;
+    let totalCost = durationHours * vehicle.hourlyRate;
     
     // Apply discount if provided
     if (reservationData.discountCode && 
-        reservationData.discountCode.toUpperCase() === vehicle.vehicle.discountCode &&
-        vehicle.vehicle.discountPercentage > 0) {
-        const discountAmount = totalCost * (vehicle.vehicle.discountPercentage / 100);
+        reservationData.discountCode.toUpperCase() === vehicle.discountCode &&
+        vehicle.discountPercentage > 0) {
+        const discountAmount = totalCost * (vehicle.discountPercentage / 100);
         totalCost -= discountAmount;
     }
 
@@ -449,16 +363,16 @@ async function createReservation(reservationData, userInfo) {
         userId: userInfo.userId,
         userEmail: userInfo.email,
         vehicleId: reservationData.vehicleId,
-        vehicleType: vehicle.vehicle.vehicleType,
-        vehicleModel: vehicle.vehicle.model,
+        vehicleType: vehicle.vehicleType,
+        vehicleModel: vehicle.model,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         durationHours: durationHours,
-        hourlyRate: vehicle.vehicle.hourlyRate,
+        hourlyRate: vehicle.hourlyRate,
         discountCode: reservationData.discountCode || null,
         discountPercentage: (reservationData.discountCode && 
-                           reservationData.discountCode.toUpperCase() === vehicle.vehicle.discountCode) 
-                           ? vehicle.vehicle.discountPercentage : 0,
+                           reservationData.discountCode.toUpperCase() === vehicle.discountCode) 
+                           ? vehicle.discountPercentage : 0,
         totalCost: Math.round(totalCost * 100) / 100, // Round to 2 decimal places
         status: 'confirmed',
         notes: reservationData.notes || null,
@@ -476,34 +390,23 @@ async function createReservation(reservationData, userInfo) {
     await dynamodb.put(reservationParams).promise();
 
     // Update vehicle status to reserved
-    const vehicleParams = {
+    const vehicleUpdateParams = {
         TableName: VEHICLES_TABLE,
-        FilterExpression: 'vehicleId = :vehicleId',
+        Key: {
+            vehicleId: reservationData.vehicleId,
+            ownerId: vehicle.ownerId
+        },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+            '#status': 'status'
+        },
         ExpressionAttributeValues: {
-            ':vehicleId': reservationData.vehicleId
+            ':status': 'reserved',
+            ':updatedAt': timestamp
         }
     };
-
-    const vehicleResult = await dynamodb.scan(vehicleParams).promise();
-    if (vehicleResult.Items && vehicleResult.Items.length > 0) {
-        const vehicleItem = vehicleResult.Items[0];
-        const vehicleUpdateParams = {
-            TableName: VEHICLES_TABLE,
-            Key: {
-                vehicleId: reservationData.vehicleId,
-                ownerId: vehicleItem.ownerId
-            },
-            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-            ExpressionAttributeNames: {
-                '#status': 'status'
-            },
-            ExpressionAttributeValues: {
-                ':status': 'reserved',
-                ':updatedAt': timestamp
-            }
-        };
-        await dynamodb.update(vehicleUpdateParams).promise();
-    }
+    
+    await dynamodb.update(vehicleUpdateParams).promise();
 
     return {
         success: true,
@@ -712,35 +615,24 @@ async function cancelReservation(reservationId, userInfo) {
     const result = await dynamodb.update(params).promise();
     
     // Update vehicle status back to available
-    const vehicleParams = {
+    const vehicle = await getVehicleForReservation(reservation.vehicleId);
+    const vehicleUpdateParams = {
         TableName: VEHICLES_TABLE,
-        FilterExpression: 'vehicleId = :vehicleId',
+        Key: {
+            vehicleId: reservation.vehicleId,
+            ownerId: vehicle.ownerId
+        },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+            '#status': 'status'
+        },
         ExpressionAttributeValues: {
-            ':vehicleId': reservation.vehicleId
+            ':status': 'available',
+            ':updatedAt': timestamp
         }
     };
-
-    const vehicleResult = await dynamodb.scan(vehicleParams).promise();
-    if (vehicleResult.Items && vehicleResult.Items.length > 0) {
-        const vehicle = vehicleResult.Items[0];
-        const vehicleUpdateParams = {
-            TableName: VEHICLES_TABLE,
-            Key: {
-                vehicleId: reservation.vehicleId,
-                ownerId: vehicle.ownerId
-            },
-            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-            ExpressionAttributeNames: {
-                '#status': 'status'
-            },
-            ExpressionAttributeValues: {
-                ':status': 'available',
-                ':updatedAt': timestamp
-            }
-        };
-        
-        await dynamodb.update(vehicleUpdateParams).promise();
-    }
+    
+    await dynamodb.update(vehicleUpdateParams).promise();
 
     return {
         success: true,
@@ -787,35 +679,24 @@ async function completeReservation(reservationId, userInfo) {
     const result = await dynamodb.update(params).promise();
     
     // Update vehicle status back to available
-    const vehicleParams = {
+    const vehicle = await getVehicleForReservation(reservation.vehicleId);
+    const vehicleUpdateParams = {
         TableName: VEHICLES_TABLE,
-        FilterExpression: 'vehicleId = :vehicleId',
+        Key: {
+            vehicleId: reservation.vehicleId,
+            ownerId: vehicle.ownerId
+        },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+            '#status': 'status'
+        },
         ExpressionAttributeValues: {
-            ':vehicleId': reservation.vehicleId
+            ':status': 'available',
+            ':updatedAt': timestamp
         }
     };
-
-    const vehicleResult = await dynamodb.scan(vehicleParams).promise();
-    if (vehicleResult.Items && vehicleResult.Items.length > 0) {
-        const vehicle = vehicleResult.Items[0];
-        const vehicleUpdateParams = {
-            TableName: VEHICLES_TABLE,
-            Key: {
-                vehicleId: reservation.vehicleId,
-                ownerId: vehicle.ownerId
-            },
-            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-            ExpressionAttributeNames: {
-                '#status': 'status'
-            },
-            ExpressionAttributeValues: {
-                ':status': 'available',
-                ':updatedAt': timestamp
-            }
-        };
-        
-        await dynamodb.update(vehicleUpdateParams).promise();
-    }
+    
+    await dynamodb.update(vehicleUpdateParams).promise();
 
     return {
         success: true,
@@ -1087,7 +968,7 @@ async function updateRide(rideId, updateData, userInfo) {
     };
 }
 
-// Profile-related functions (basic implementation)
+// Profile-related functions
 async function getUserProfile(userInfo) {
     return {
         success: true,
@@ -1095,16 +976,37 @@ async function getUserProfile(userInfo) {
             userId: userInfo.userId,
             email: userInfo.email,
             role: userInfo.role,
-            groups: userInfo.groups
+            groups: userInfo.groups,
+            registrationDate: userInfo.registrationDate || null,
+            preferences: {
+                notifications: true,
+                marketing: false
+            }
         },
         message: 'Profile retrieved successfully'
     };
 }
 
 async function updateUserProfile(profileData, userInfo) {
+    // Basic implementation - you can expand this to update user preferences
+    const allowedUpdates = ['preferences', 'displayName'];
+    const updates = {};
+    
+    for (const field of allowedUpdates) {
+        if (profileData[field] !== undefined) {
+            updates[field] = profileData[field];
+        }
+    }
+    
+    if (Object.keys(updates).length === 0) {
+        throw { statusCode: 400, message: 'No valid fields to update' };
+    }
+    
     return {
         success: true,
-        message: 'Profile update functionality not yet implemented'
+        message: 'Profile update functionality - basic implementation',
+        updatedFields: Object.keys(updates),
+        note: 'Full profile management can be implemented as needed'
     };
 }
 
