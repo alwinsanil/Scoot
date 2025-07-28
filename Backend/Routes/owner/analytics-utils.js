@@ -10,30 +10,29 @@ async function getUserAnalytics(queryParams, userInfo) {
     console.log('Getting user analytics for:', userInfo.userId);
     
     const { period = '30d', groupBy = 'day' } = queryParams;
-    
+
     try {
-        // Get total users count
+        // Step 1: Fetch all users
         const totalUsersResponse = await cognito.listUsers({
             UserPoolId: USER_POOL_ID,
             Limit: 60
         }).promise();
-        
+
         let allUsers = totalUsersResponse.Users;
         let nextToken = totalUsersResponse.PaginationToken;
-        
-        // Fetch all users if there are more pages
+
         while (nextToken) {
             const response = await cognito.listUsers({
                 UserPoolId: USER_POOL_ID,
                 Limit: 60,
                 PaginationToken: nextToken
             }).promise();
-            
+
             allUsers = allUsers.concat(response.Users);
             nextToken = response.PaginationToken;
         }
 
-        // Filter and analyze users
+        // Step 2: Initialize stats
         const now = new Date();
         const periodDays = parseInt(period.replace('d', ''));
         const startDate = new Date(now.getTime() - (periodDays * 24 * 60 * 60 * 1000));
@@ -57,14 +56,12 @@ async function getUserAnalytics(queryParams, userInfo) {
             usersByGroup: {
                 owners: 0,
                 admins: 0,
-                users: 0,
-                'franchise-operators': 0
+                users: 0
             }
         };
 
-        // Analyze each user
-        allUsers.forEach(user => {
-            // Count by status
+        // Step 3: Analyze each user
+        for (const user of allUsers) {
             const status = user.UserStatus || 'UNKNOWN';
             userStats.usersByStatus[status]++;
             
@@ -74,36 +71,43 @@ async function getUserAnalytics(queryParams, userInfo) {
                 userStats.unverifiedUsers++;
             }
 
-            // Check if user is new (created within the period)
             const createdDate = new Date(user.UserCreateDate);
             if (createdDate >= startDate) {
                 userStats.newUsers++;
             }
 
-            // Check last activity (approximation based on last modified date)
             const lastModified = new Date(user.UserLastModifiedDate);
             if (lastModified >= startDate) {
                 userStats.activeUsers++;
             }
 
-            // Analyze user groups from Cognito groups
-            // Note: This would need to be enhanced to fetch user's group memberships
-            // For now, we'll use a simple approach based on attributes
-            const userAttributes = user.Attributes || [];
-            const groupsAttr = userAttributes.find(attr => attr.Name === 'custom:groups');
-            if (groupsAttr) {
-                const groups = groupsAttr.Value.split(',');
-                groups.forEach(group => {
-                    if (userStats.usersByGroup.hasOwnProperty(group.trim())) {
-                        userStats.usersByGroup[group.trim()]++;
-                    }
-                });
-            } else {
+            // Step 4: Get actual group membership using AWS SDK
+            try {
+                const groupResponse = await cognito.adminListGroupsForUser({
+                    UserPoolId: USER_POOL_ID,
+                    Username: user.Username
+                }).promise();
+
+                const groups = groupResponse.Groups || [];
+
+                if (groups.length > 0) {
+                    groups.forEach(group => {
+                        const groupName = group.GroupName;
+                        if (userStats.usersByGroup.hasOwnProperty(groupName)) {
+                            userStats.usersByGroup[groupName]++;
+                        }
+                    });
+                } else {
+                    userStats.usersByGroup.users++;
+                }
+
+            } catch (err) {
+                console.warn(`Could not fetch groups for user ${user.Username}: ${err.message}`);
                 userStats.usersByGroup.users++;
             }
-        });
+        }
 
-        // Generate registration trend data
+        // Step 5: Registration trend data
         const trendData = generateTrendData(allUsers, periodDays, groupBy);
         userStats.registrationTrend = trendData;
 
@@ -119,6 +123,7 @@ async function getUserAnalytics(queryParams, userInfo) {
         throw { statusCode: 500, message: 'Failed to fetch user analytics: ' + error.message };
     }
 }
+
 
 async function getLoginStats(queryParams, userInfo) {
     console.log('Getting login statistics for:', userInfo.userId);
