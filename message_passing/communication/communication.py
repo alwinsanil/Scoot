@@ -264,6 +264,35 @@ def get_messages(concern_id):
         'body': json.dumps({'concernId': concern_id, 'messages': messages})
     }
 
+# def handle_sqs_event(event):
+#     """Process SQS messages from SNS (ConcernDetailsTopic)"""
+#     for record in event['Records']:
+#         body = json.loads(record['body'])
+        
+#         # ✅ If SQS is subscribed to SNS, parse inner Message
+#         message = json.loads(body.get('Message', '{}'))
+
+#         concern_id = message['concernId']
+#         message_id = str(uuid.uuid4())
+#         timestamp = datetime.utcnow().isoformat() + 'Z'
+
+#         # Save system message to DynamoDB
+#         table.put_item(
+#             Item={
+#                 'concernId': concern_id,
+#                 'messageId': message_id,
+#                 'senderId': message.get('assignedOperator', 'system'),
+#                 'senderType': 'SYSTEM',
+#                 'operatorId': message.get('assignedOperator', 'unknown'),
+#                 'message': f"Action: {message.get('action', 'CONCERN_ASSIGNED')}",
+#                 'timestamp': timestamp
+#             }
+#         )
+
+#         print(f"✅ SQS message saved for {concern_id}")
+
+#     return {"statusCode": 200, "body": json.dumps({"status": "processed"})}
+
 def handle_sqs_event(event):
     """Process SQS messages from SNS (ConcernDetailsTopic)"""
     for record in event['Records']:
@@ -291,4 +320,7 @@ def handle_sqs_event(event):
 
         print(f"✅ SQS message saved for {concern_id}")
 
-    return {"statusCode": 200, "body": json.dumps({"status": "processed"})}
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"status": "processed"})
+    }
