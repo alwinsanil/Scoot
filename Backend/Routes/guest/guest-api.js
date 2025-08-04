@@ -83,8 +83,7 @@ async function handleGuestRequest(pathParts, method, queryParams, body) {
             return await handleGuestVehicles(method, resourceId, queryParams);
         case 'feedback':  // NEW
             return await handleAllFeedbackEndpoint(method, queryParams, null);
-        case 'callback':
-            return handleAuthCallback(queryParams);
+        
         
         default:
             return {
@@ -95,7 +94,6 @@ async function handleGuestRequest(pathParts, method, queryParams, body) {
                     'GET /guest/vehicles/{id}': 'Get specific vehicle details (public)',
                     'GET /guest/vehicles/{id}/reviews': 'Get vehicle reviews and ratings (public)',
                     'GET /guest/scooters': 'Alias for vehicles endpoint',
-                    'GET /guest/callback': 'Authentication callback handler',
                     'GET /guest/feedback': 'Get all feedback with sentiment analysis (public)', // NEW
                 }
             };
@@ -464,7 +462,7 @@ function calculateSentimentAnalytics(reviews) {
     };
 }
 
-// 🎯 NEW: Enhanced review summary with sentiment data
+// NEW: Enhanced review summary with sentiment data
 function calculateEnhancedReviewSummary(reviews) {
     const basicSummary = calculateReviewSummary(reviews);
     
@@ -522,8 +520,7 @@ async function getAllFeedbackWithSentimentAnalysis(queryParams, userInfo) {
     }
 
     if (queryParams.severity) {
-        // Note: severity would need to be calculated on the fly or stored
-        // For now, we'll filter after retrieval
+
     }
 
     if (filters.length > 0) {
@@ -697,23 +694,6 @@ function calculateReviewSummary(reviews) {
     };
 }
 
-// Authentication callback handler
-function handleAuthCallback(queryParams) {
-    const id_token = queryParams.code;
-    if (!id_token) {
-        throw { statusCode: 400, message: 'Missing authorization code' };
-    }
-
-    // In a real implementation, you'd validate the token and exchange it
-    const redirectUrl = `http://localhost:3000/qna-setup?token=${encodeURIComponent(id_token)}`;
-
-    return {
-        success: true,
-        redirectUrl: redirectUrl,
-        message: 'Authentication callback processed successfully'
-    };
-}
-
 // Helper functions
 function anonymizeEmail(email) {
     if (!email) return 'Anonymous';
@@ -736,8 +716,6 @@ function getAvailableCategories(reviews) {
 }
 
 function getMostPositiveAspect(reviews) {
-    // Simple implementation - could be enhanced with NLP
-    const positiveWords = ['excellent', 'great', 'amazing', 'perfect', 'wonderful', 'fantastic'];
     const aspectCounts = {};
     
     reviews.filter(r => r.rating >= 4).forEach(review => {

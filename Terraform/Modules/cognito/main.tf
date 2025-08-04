@@ -98,9 +98,9 @@ resource "aws_cognito_user_pool_client" "client" {
   generate_secret = true
   
   # OAuth settings
-  callback_urls = ["https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
+  callback_urls = ["https://27y5d88znf.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
   logout_urls   = ["http://localhost:5173"]
-  default_redirect_uri = "https://eyoib5lnj8.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+  default_redirect_uri = "https://27y5d88znf.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
   
   allowed_oauth_flows = ["code"]
   allowed_oauth_scopes = ["email", "openid", "profile"]
