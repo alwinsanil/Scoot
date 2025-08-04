@@ -1,6 +1,7 @@
 //user-api.js
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient();
+const sns = new AWS.SNS();
 
 // Import the feedback service for sentiment analysis
 const feedbackService = require('./feedback-service');
@@ -8,6 +9,66 @@ const feedbackService = require('./feedback-service');
 const VEHICLES_TABLE = process.env.VEHICLES_TABLE || 'franchise-vehicles';
 const RESERVATIONS_TABLE = process.env.RESERVATIONS_TABLE || 'vehicle-reservations';
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE || 'vehicle-feedback';
+
+// =====================
+// Simple Email Notification
+// =====================
+async function sendEmail(userEmail, userName, type, data = {}) {
+    try {
+        const userTopicName = `user-${userEmail.replace(/[@.]/g, '-')}`;
+        
+        const topicResult = await sns.createTopic({
+            Name: userTopicName
+        }).promise();
+        
+        const subscriptions = await sns.listSubscriptionsByTopic({
+            TopicArn: topicResult.TopicArn
+        }).promise();
+
+        const confirmed = subscriptions.Subscriptions.find(
+            sub => sub.Protocol === 'email' && 
+                   sub.Endpoint === userEmail && 
+                   sub.SubscriptionArn !== 'PendingConfirmation'
+        );
+
+        if (!confirmed) {
+            await sns.subscribe({
+                TopicArn: topicResult.TopicArn,
+                Protocol: 'email',
+                Endpoint: userEmail
+            }).promise();
+            return { status: 'subscription_needed' };
+        }
+
+        let subject, message;
+        
+        switch (type) {
+            case 'reservation_success':
+                subject = '✅ Reservation Confirmed';
+                message = `Hello ${userName},\n\nYour reservation is confirmed!\n\nReservation ID: ${data.reservationId}\nVehicle: ${data.vehicleType}\nStart: ${new Date(data.startDate).toLocaleString()}\nEnd: ${new Date(data.endDate).toLocaleString()}\nTotal: $${data.totalCost}\n\nThanks!`;
+                break;
+            case 'reservation_failed':
+                subject = '❌ Reservation Failed';
+                message = `Hello ${userName},\n\nYour reservation failed.\n\nReason: ${data.reason}\n\nPlease try again.`;
+                break;
+            case 'ride_completed':
+                subject = '🏁 Ride Completed';
+                message = `Hello ${userName},\n\nRide completed!\n\nReservation ID: ${data.reservationId}\nTotal Cost: $${data.totalCost}\n\nPlease leave feedback!`;
+                break;
+        }
+
+        await sns.publish({
+            TopicArn: topicResult.TopicArn,
+            Message: message,
+            Subject: subject
+        }).promise();
+
+        return { status: 'sent' };
+    } catch (error) {
+        console.error('Email failed:', error);
+        return { status: 'error' };
+    }
+}
 
 exports.lambdaHandler = async (event) => {
     console.log('User API Event received:', JSON.stringify(event, null, 2));
@@ -294,104 +355,178 @@ async function getVehicleForReservation(vehicleId) {
     return result.Items[0];
 }
 
-// Reservation-related functions (unchanged from original)
+// Reservation-related functions (with email notifications added)
 async function createReservation(reservationData, userInfo) {
     console.log('Creating reservation:', reservationData, 'for user:', userInfo.userId);
     
-    // Validate required fields
-    const requiredFields = ['vehicleId', 'startDate', 'endDate'];
-    for (const field of requiredFields) {
-        if (!reservationData[field]) {
-            throw { statusCode: 400, message: `${field} is required` };
+    try {
+        // Validate required fields
+        const requiredFields = ['vehicleId', 'startDate', 'endDate'];
+        for (const field of requiredFields) {
+            if (!reservationData[field]) {
+                throw { statusCode: 400, message: `${field} is required` };
+            }
         }
+
+        // Validate dates
+        const startDate = new Date(reservationData.startDate);
+        const endDate = new Date(reservationData.endDate);
+        const now = new Date();
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            throw { statusCode: 400, message: 'Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)' };
+        }
+
+        if (startDate >= endDate) {
+            throw { statusCode: 400, message: 'End date must be after start date' };
+        }
+
+        if (startDate < now) {
+            throw { statusCode: 400, message: 'Start date cannot be in the past' };
+        }
+
+        // Check if vehicle exists and get its details
+        const vehicle = await getVehicleForReservation(reservationData.vehicleId);
+        
+        if (vehicle.status !== 'available') {
+            throw { statusCode: 409, message: 'Vehicle is not available for reservation' };
+        }
+        
+        // Check for conflicting reservations
+        const hasConflicts = await checkReservationConflicts(
+            reservationData.vehicleId, 
+            startDate, 
+            endDate
+        );
+        
+        if (hasConflicts) {
+            throw { statusCode: 409, message: 'Vehicle is already reserved for the requested time period' };
+        }
+
+        // Calculate total cost
+        const durationHours = Math.ceil((endDate - startDate) / (1000 * 60 * 60));
+        let totalCost = durationHours * vehicle.hourlyRate;
+        
+        // Apply discount if provided
+        if (reservationData.discountCode && 
+            reservationData.discountCode.toUpperCase() === vehicle.discountCode &&
+            vehicle.discountPercentage > 0) {
+            const discountAmount = totalCost * (vehicle.discountPercentage / 100);
+            totalCost -= discountAmount;
+        }
+
+        const reservationId = generateReservationId();
+        const timestamp = new Date().toISOString();
+
+        const reservation = {
+            reservationId: reservationId,
+            userId: userInfo.userId,
+            userEmail: userInfo.email,
+            vehicleId: reservationData.vehicleId,
+            vehicleType: vehicle.vehicleType,
+            vehicleModel: vehicle.model,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+            durationHours: durationHours,
+            hourlyRate: vehicle.hourlyRate,
+            discountCode: reservationData.discountCode || null,
+            discountPercentage: (reservationData.discountCode && 
+                               reservationData.discountCode.toUpperCase() === vehicle.discountCode) 
+                               ? vehicle.discountPercentage : 0,
+            totalCost: Math.round(totalCost * 100) / 100, // Round to 2 decimal places
+            status: 'confirmed',
+            notes: reservationData.notes || null,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        };
+
+        // Create reservation
+        const reservationParams = {
+            TableName: RESERVATIONS_TABLE,
+            Item: reservation,
+            ConditionExpression: 'attribute_not_exists(reservationId)'
+        };
+
+        await dynamodb.put(reservationParams).promise();
+
+        // Update vehicle status to reserved
+        const vehicleUpdateParams = {
+            TableName: VEHICLES_TABLE,
+            Key: {
+                vehicleId: reservationData.vehicleId,
+                ownerId: vehicle.ownerId
+            },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
+            ExpressionAttributeValues: {
+                ':status': 'reserved',
+                ':updatedAt': timestamp
+            }
+        };
+        
+        await dynamodb.update(vehicleUpdateParams).promise();
+
+        // 🎯 Send success email
+        await sendEmail(userInfo.email, userInfo.email, 'reservation_success', reservation);
+
+        return {
+            success: true,
+            reservation: reservation,
+            message: 'Reservation created successfully'
+        };
+
+    } catch (error) {
+        // 🎯 Send failure email
+        await sendEmail(userInfo.email, userInfo.email, 'reservation_failed', { reason: error.message });
+        throw error;
     }
+}
 
-    // Validate dates
-    const startDate = new Date(reservationData.startDate);
-    const endDate = new Date(reservationData.endDate);
-    const now = new Date();
-
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        throw { statusCode: 400, message: 'Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)' };
-    }
-
-    if (startDate >= endDate) {
-        throw { statusCode: 400, message: 'End date must be after start date' };
-    }
-
-    if (startDate < now) {
-        throw { statusCode: 400, message: 'Start date cannot be in the past' };
-    }
-
-    // Check if vehicle exists and get its details
-    const vehicle = await getVehicleForReservation(reservationData.vehicleId);
+async function completeReservation(reservationId, userInfo) {
+    console.log('Completing reservation:', reservationId, 'for user:', userInfo.userId);
     
-    if (vehicle.status !== 'available') {
-        throw { statusCode: 409, message: 'Vehicle is not available for reservation' };
+    // Get existing reservation
+    const existingReservation = await getReservation(reservationId, userInfo);
+    const reservation = existingReservation.reservation;
+    
+    if (reservation.status === 'completed') {
+        throw { statusCode: 400, message: 'Reservation is already completed' };
     }
     
-    // Check for conflicting reservations
-    const hasConflicts = await checkReservationConflicts(
-        reservationData.vehicleId, 
-        startDate, 
-        endDate
-    );
-    
-    if (hasConflicts) {
-        throw { statusCode: 409, message: 'Vehicle is already reserved for the requested time period' };
+    if (reservation.status === 'cancelled') {
+        throw { statusCode: 400, message: 'Cannot complete a cancelled reservation' };
     }
-
-    // Calculate total cost
-    const durationHours = Math.ceil((endDate - startDate) / (1000 * 60 * 60));
-    let totalCost = durationHours * vehicle.hourlyRate;
     
-    // Apply discount if provided
-    if (reservationData.discountCode && 
-        reservationData.discountCode.toUpperCase() === vehicle.discountCode &&
-        vehicle.discountPercentage > 0) {
-        const discountAmount = totalCost * (vehicle.discountPercentage / 100);
-        totalCost -= discountAmount;
-    }
-
-    const reservationId = generateReservationId();
+    // Update reservation status to completed
     const timestamp = new Date().toISOString();
-
-    const reservation = {
-        reservationId: reservationId,
-        userId: userInfo.userId,
-        userEmail: userInfo.email,
-        vehicleId: reservationData.vehicleId,
-        vehicleType: vehicle.vehicleType,
-        vehicleModel: vehicle.model,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        durationHours: durationHours,
-        hourlyRate: vehicle.hourlyRate,
-        discountCode: reservationData.discountCode || null,
-        discountPercentage: (reservationData.discountCode && 
-                           reservationData.discountCode.toUpperCase() === vehicle.discountCode) 
-                           ? vehicle.discountPercentage : 0,
-        totalCost: Math.round(totalCost * 100) / 100, // Round to 2 decimal places
-        status: 'confirmed',
-        notes: reservationData.notes || null,
-        createdAt: timestamp,
-        updatedAt: timestamp
-    };
-
-    // Create reservation
-    const reservationParams = {
+    const params = {
         TableName: RESERVATIONS_TABLE,
-        Item: reservation,
-        ConditionExpression: 'attribute_not_exists(reservationId)'
+        Key: {
+            reservationId: reservationId,
+            userId: userInfo.userId
+        },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, completedAt = :completedAt',
+        ExpressionAttributeNames: {
+            '#status': 'status'
+        },
+        ExpressionAttributeValues: {
+            ':status': 'completed',
+            ':updatedAt': timestamp,
+            ':completedAt': timestamp
+        },
+        ReturnValues: 'ALL_NEW'
     };
 
-    await dynamodb.put(reservationParams).promise();
-
-    // Update vehicle status to reserved
+    const result = await dynamodb.update(params).promise();
+    
+    // Update vehicle status back to available
+    const vehicle = await getVehicleForReservation(reservation.vehicleId);
     const vehicleUpdateParams = {
         TableName: VEHICLES_TABLE,
         Key: {
-            vehicleId: reservationData.vehicleId,
+            vehicleId: reservation.vehicleId,
             ownerId: vehicle.ownerId
         },
         UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
@@ -399,17 +534,20 @@ async function createReservation(reservationData, userInfo) {
             '#status': 'status'
         },
         ExpressionAttributeValues: {
-            ':status': 'reserved',
+            ':status': 'available',
             ':updatedAt': timestamp
         }
     };
     
     await dynamodb.update(vehicleUpdateParams).promise();
 
+    // 🎯 Send completion email
+    await sendEmail(userInfo.email, userInfo.email, 'ride_completed', result.Attributes);
+
     return {
         success: true,
-        reservation: reservation,
-        message: 'Reservation created successfully'
+        reservation: result.Attributes,
+        message: 'Reservation completed successfully. Thank you for using our service!'
     };
 }
 
@@ -639,70 +777,6 @@ async function cancelReservation(reservationId, userInfo) {
     };
 }
 
-async function completeReservation(reservationId, userInfo) {
-    console.log('Completing reservation:', reservationId, 'for user:', userInfo.userId);
-    
-    // Get existing reservation
-    const existingReservation = await getReservation(reservationId, userInfo);
-    const reservation = existingReservation.reservation;
-    
-    if (reservation.status === 'completed') {
-        throw { statusCode: 400, message: 'Reservation is already completed' };
-    }
-    
-    if (reservation.status === 'cancelled') {
-        throw { statusCode: 400, message: 'Cannot complete a cancelled reservation' };
-    }
-    
-    // Update reservation status to completed
-    const timestamp = new Date().toISOString();
-    const params = {
-        TableName: RESERVATIONS_TABLE,
-        Key: {
-            reservationId: reservationId,
-            userId: userInfo.userId
-        },
-        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, completedAt = :completedAt',
-        ExpressionAttributeNames: {
-            '#status': 'status'
-        },
-        ExpressionAttributeValues: {
-            ':status': 'completed',
-            ':updatedAt': timestamp,
-            ':completedAt': timestamp
-        },
-        ReturnValues: 'ALL_NEW'
-    };
-
-    const result = await dynamodb.update(params).promise();
-    
-    // Update vehicle status back to available
-    const vehicle = await getVehicleForReservation(reservation.vehicleId);
-    const vehicleUpdateParams = {
-        TableName: VEHICLES_TABLE,
-        Key: {
-            vehicleId: reservation.vehicleId,
-            ownerId: vehicle.ownerId
-        },
-        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-            '#status': 'status'
-        },
-        ExpressionAttributeValues: {
-            ':status': 'available',
-            ':updatedAt': timestamp
-        }
-    };
-    
-    await dynamodb.update(vehicleUpdateParams).promise();
-
-    return {
-        success: true,
-        reservation: result.Attributes,
-        message: 'Reservation completed successfully. Thank you for using our service!'
-    };
-}
-
 // Enhanced Feedback-related functions with sentiment analysis
 async function submitFeedbackWithAnalysis(feedbackData, userInfo) {
     console.log('Submitting feedback with analysis:', feedbackData, 'for user:', userInfo.userId);
@@ -906,7 +980,6 @@ async function updateFeedbackWithAnalysis(feedbackId, updateData, userInfo) {
             sentimentUpdate = {
                 sentiment: analysis.sentiment,
                 sentimentConfidence: analysis.confidence,
-                // emotions removed
                 keywords: analysis.keywords,
                 categories: analysis.categories,
                 severity: analysis.severity,
@@ -1019,7 +1092,6 @@ async function getUserFeedbackAnalytics(userInfo, queryParams) {
         success: true,
         analytics: {
             ...analytics,
-            personalInsights: personalInsights,
             feedbackHistory: feedback.slice(0, 5), // Last 5 feedback items
         },
         message: 'Personal feedback analytics retrieved successfully'
