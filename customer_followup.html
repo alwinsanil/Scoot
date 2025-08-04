@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DALScooter - Customer Follow-Up</title>
+<style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); min-height: 100vh;}
+    .container { background: rgba(255,255,255,0.95); border-radius: 15px; padding: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);}
+    .section { background: #f9f9f9; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 5px solid #667eea;}
+    .form-group { margin-bottom: 15px; }
+    label { display:block; margin-bottom:5px; font-weight:bold; color:#333; }
+    input, textarea { width:100%; padding:12px; border:2px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;}
+    input:focus, textarea:focus { border-color:#667eea; outline:none; box-shadow:0 0 5px rgba(102,126,234,0.3);}
+    button { background:linear-gradient(45deg,#667eea,#764ba2); color:white; padding:12px 24px; border:none; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; width:100%; transition:all 0.3s ease;}
+    button:hover { transform: translateY(-2px); box-shadow:0 4px 15px rgba(102,126,234,0.3);}
+    .status { margin-top:15px; padding:12px; border-radius:6px; font-weight:bold;}
+    .success { background:#d4edda; color:#155724; border:1px solid #c3e6cb;}
+    .error { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb;}
+    .messages { max-height:400px; overflow-y:auto; background:white; padding:15px; border:2px solid #e9ecef; border-radius:6px; margin-top:10px;}
+    .message { padding:12px; margin-bottom:12px; border-left:4px solid #ccc; border-radius:4px; font-size:14px;}
+    .message.operator { border-left-color:#007bff; background:#f8f9fa;}
+    .message.user { border-left-color:#28a745; background:#f8fff8;}
+    .message.system { border-left-color:#ffc107; background:#fffbf0;}
+    h1 { color:#333; text-align:center; margin-bottom:30px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>💬 Track & Follow Up</h1>
+
+    <!-- Enter Concern ID -->
+    <div class="section">
+        <h2>Enter Your Concern ID</h2>
+        <div class="form-group">
+            <label>Concern ID:</label>
+            <input type="text" id="concernInput" placeholder="e.g. C1753936029971" />
+        </div>
+        <button onclick="startTracking()">Start Tracking</button>
+    </div>
+
+    <!-- View Messages -->
+    <div class="section" id="messagesSection" style="display:none;">
+        <h2>📋 Conversation</h2>
+        <div id="messagesContainer" class="messages"></div>
+    </div>
+
+    <!-- Send Follow-up -->
+    <div class="section" id="followupSection" style="display:none;">
+        <h2>💬 Send Follow-up</h2>
+        <form id="customerForm">
+            <div class="form-group">
+                <label>Your Message:</label>
+                <textarea id="custMessage" rows="4" placeholder="Add more details..." required></textarea>
+            </div>
+            <button type="submit">Send Follow-up</button>
+        </form>
+        <div id="custStatus"></div>
+    </div>
+</div>
+
+<script>
+const API_BASE = 'https://llcrjx8j5c.execute-api.us-east-1.amazonaws.com';
+let concernId = '';
+let autoRefresh = null;
+
+function startTracking() {
+    const input = document.getElementById('concernInput').value.trim();
+    if (!input) return alert("Please enter a valid Concern ID");
+
+    concernId = input;
+    document.getElementById('messagesSection').style.display = 'block';
+    document.getElementById('followupSection').style.display = 'block';
+
+    loadMessages();
+    if (autoRefresh) clearInterval(autoRefresh);
+    autoRefresh = setInterval(loadMessages, 5000);
+}
+
+async function loadMessages() {
+    const container = document.getElementById('messagesContainer');
+    container.innerHTML = 'Loading messages...';
+    try {
+        const response = await fetch(`${API_BASE}/concerns/${concernId}/messages`);
+        const result = await response.json();
+        if (response.ok && result.messages?.length) {
+            container.innerHTML = result.messages.map(msg => `
+                <div class="message ${msg.senderType.toLowerCase()}">
+                    <strong>${msg.senderType}: ${msg.senderId}</strong><br>
+                    <small>${new Date(msg.timestamp).toLocaleString()}</small><br>
+                    <div style="margin-top: 8px;">${msg.message}</div>
+                </div>
+            `).join('');
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.innerHTML = 'No messages yet.';
+        }
+    } catch (err) {
+        container.innerHTML = '❌ Failed to load messages';
+    }
+}
+
+document.getElementById('customerForm').addEventListener('submit', e => {
+    e.preventDefault();
+    sendMessage();
+});
+
+async function sendMessage() {
+    const statusDiv = document.getElementById('custStatus');
+    statusDiv.innerHTML = 'Sending...';
+    const msg = document.getElementById('custMessage').value;
+
+    try {
+        const response = await fetch(`${API_BASE}/concerns/${concernId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                senderId: 'customer-user',
+                senderType: 'USER',
+                message: msg
+            }),
+        });
+
+        if (response.ok) {
+            document.getElementById('custMessage').value = '';
+            statusDiv.innerHTML = '<div class="status success">✅ Follow-up sent!</div>';
+            loadMessages();
+        } else {
+            statusDiv.innerHTML = '<div class="status error">❌ Error sending follow-up</div>';
+        }
+    } catch (err) {
+        statusDiv.innerHTML = '<div class="status error">❌ Network error</div>';
+    }
+}
+</script>
+</body>
+</html>
