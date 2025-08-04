@@ -38,3 +38,9 @@ variable "api_url" {
   type        = string
   
 }
+
+variable "sns_arn" {
+  description = "SNS Topic ARN"
+  type        = string
+  
+}

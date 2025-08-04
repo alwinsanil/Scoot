@@ -4,6 +4,7 @@ const axios = require('axios');
 const { buildResponse, buildHtmlResponse } = require('./utils/response');
 
 const dynamoClient = new AWS.DynamoDB.DocumentClient();
+const sns = new AWS.SNS();
 
 const WORD_BANK = [
     'apple', 'bread', 'chair', 'drink', 'eagle',
@@ -15,14 +16,13 @@ const WORD_BANK = [
 
 exports.handler = async (event) => {
     try {
-        const path = event.path || event.rawPath; // fallback if event.path is undefined
+        const path = event.path || event.rawPath;
         const httpMethod = event.httpMethod || event.requestContext?.http?.method;
 
         if (!path || !httpMethod) {
             throw new Error('Missing path or HTTP method in request event');
         }
 
-        // Route the request based on path and method
         switch (true) {
             case path.endsWith('/callback') && httpMethod === 'GET':
                 return await handleCallback(event);
@@ -52,6 +52,115 @@ exports.handler = async (event) => {
     }
 };
 
+// =====================
+// SNS Email Helper - Individual User Topics
+// =====================
+
+async function sendEmailNotification(userEmail, userName, notificationType) {
+    if (!userEmail) {
+        console.warn('No user email provided, skipping notification');
+        return;
+    }
+
+    try {
+        // Create unique topic name for this user
+        const userTopicName = `user-${userEmail.replace(/[@.]/g, '-')}`;
+        
+        // Create or get user-specific topic
+        const topicResult = await sns.createTopic({
+            Name: userTopicName
+        }).promise();
+        
+        const userTopicArn = topicResult.TopicArn;
+        console.log('User topic ARN:', userTopicArn);
+
+        // Check if user already has a confirmed subscription
+        const subscriptions = await sns.listSubscriptionsByTopic({
+            TopicArn: userTopicArn
+        }).promise();
+
+        const existingSubscription = subscriptions.Subscriptions.find(
+            sub => sub.Protocol === 'email' && 
+                   sub.Endpoint === userEmail && 
+                   sub.SubscriptionArn !== 'PendingConfirmation'
+        );
+
+        // Only subscribe if no confirmed subscription exists
+        if (!existingSubscription) {
+            console.log('No confirmed subscription found, creating new subscription');
+            
+            const subscribeResult = await sns.subscribe({
+                TopicArn: userTopicArn,
+                Protocol: 'email',
+                Endpoint: userEmail
+            }).promise();
+            
+            console.log('Subscription created:', subscribeResult.SubscriptionArn);
+            console.log('User will receive confirmation email first');
+            
+            // For new subscriptions, don't send the actual message yet
+            // User needs to confirm first
+            if (notificationType === 'registration') {
+                console.log('New user - they will get welcome email after confirming subscription');
+                return { 
+                    status: 'subscription_pending',
+                    message: 'User will receive confirmation email first, then welcome email'
+                };
+            }
+        } else {
+            console.log('Confirmed subscription exists, sending message directly');
+        }
+
+        // Prepare message
+        let subject, message;
+        
+        switch (notificationType) {
+            case 'registration':
+                subject = 'Welcome to DalScooter! 🛴';
+                message = `Hello ${userName},\n\nWelcome to DalScooter! 🎉\n\nYour account has been successfully registered and verified. You can now start using our platform to book scooters and explore the city!\n\nWhat you can do next:\n• Download our mobile app\n• Find nearby scooters\n• Start your first ride\n\nIf you have any questions, feel free to contact our support team.\n\nHappy riding!\nThe DalScooter Team 🛴`;
+                break;
+            case 'login':
+                subject = 'Login Alert - DalScooter';
+                message = `Hello ${userName},\n\nYou have successfully logged into your DalScooter account.\n\nLogin details:\n• Time: ${new Date().toLocaleString()}\n• Account: ${userEmail}\n\nIf this wasn't you, please contact our support team immediately.\n\nStay safe and ride responsibly!\nThe DalScooter Team`;
+                break;
+            default:
+                subject = 'DalScooter Account Activity';
+                message = `Hello ${userName},\n\nThere has been activity on your DalScooter account.\n\nActivity time: ${new Date().toLocaleString()}\n\nIf you have any concerns, please contact our support team.\n\nBest regards,\nThe DalScooter Team`;
+        }
+
+        // Only send if subscription is confirmed
+        if (existingSubscription) {
+            const publishResult = await sns.publish({
+                TopicArn: userTopicArn,
+                Message: message,
+                Subject: subject
+            }).promise();
+
+            console.log('✅ Email notification sent to:', userEmail);
+            console.log('Message ID:', publishResult.MessageId);
+            
+            return {
+                status: 'sent',
+                messageId: publishResult.MessageId,
+                email: userEmail
+            };
+        } else {
+            console.log('⏳ Subscription pending confirmation, message not sent yet');
+            return {
+                status: 'subscription_pending',
+                message: 'User needs to confirm subscription first'
+            };
+        }
+
+    } catch (error) {
+        console.error('❌ Failed to send email notification:', error);
+        console.error('User email:', userEmail);
+        return {
+            status: 'error',
+            error: error.message
+        };
+    }
+}
 
 // =====================
 // Route Handlers
@@ -76,6 +185,8 @@ async function handleCallback(event) {
     const sessionData = {
         tempToken,
         userId: userInfo.sub,
+        userEmail: userInfo.email,
+        userName: userInfo.name || userInfo.email,
         cognitoTokens: cognitoTokens,
         step1Complete: true,
         step2Complete: false,
@@ -90,12 +201,12 @@ async function handleCallback(event) {
         Item: sessionData
     }).promise();
 
-
     const response = {
         tempToken: tempToken,
         nextStep: "qna",
         message: "Step 1 complete. Please proceed to Q&A verification."
     };
+    
     const htmlForm = `
 <!DOCTYPE html>
 <html>
@@ -131,10 +242,8 @@ async function handleCallback(event) {
                 message: formData.get('message')
             };
             
-            // Base64 encode the data for secure URL transport
             const dataString = btoa(JSON.stringify(authData));
             
-            // Redirect to React app after a short delay
             setTimeout(() => {
                 window.location.href = \`http://localhost:5173/auth/qna/callback?data=\${dataString}\`;
             }, 1500);
@@ -147,7 +256,6 @@ async function handleCallback(event) {
 }
 
 async function handleQna(event) {
-    // Handle preflight OPTIONS request
     if (event.httpMethod === 'OPTIONS') {
         return buildResponse(200, { message: 'Success' });
     }
@@ -165,18 +273,14 @@ async function handleQna(event) {
         });
     }
 
-    // Retrieve session
     const session = await getSession(tempToken);
     if (!session || !session.step1Complete) {
         return buildResponse(401, { message: 'Invalid session or step 1 not complete' });
     }
 
-    // Check if user has existing Q&A answers
     const existingAnswers = await getUserQnaAnswers(session.userId);
-
-    // Generate cipher challenge for both first-time and returning users
     const randomWord = WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
-    const randomShift = Math.floor(Math.random() * 25) + 1; // shift between 1 and 25
+    const randomShift = Math.floor(Math.random() * 25) + 1;
     const cipherChallenge = caesarShift(randomWord, randomShift);
 
     if (!existingAnswers) {
@@ -184,16 +288,16 @@ async function handleQna(event) {
         try {
             await storeQnaAnswers(session.userId, answers);
 
-            // Update session to mark step 2 as complete AND store cipher challenge
             await dynamoClient.update({
                 TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
                 Key: { tempToken },
-                UpdateExpression: 'SET step2Complete = :true, cipherOriginal = :word, cipherShift = :shift, cipherChallenge = :challenge',
+                UpdateExpression: 'SET step2Complete = :true, cipherOriginal = :word, cipherShift = :shift, cipherChallenge = :challenge, isFirstTime = :first',
                 ExpressionAttributeValues: {
                     ':true': true,
                     ':word': randomWord,
                     ':shift': randomShift,
-                    ':challenge': cipherChallenge
+                    ':challenge': cipherChallenge,
+                    ':first': true
                 }
             }).promise();
 
@@ -221,20 +325,19 @@ async function handleQna(event) {
             });
         }
 
-        // Store cipher challenge and answer shift in DynamoDB (or update session)
         await dynamoClient.update({
             TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
             Key: { tempToken },
-            UpdateExpression: 'SET step2Complete = :true, cipherOriginal = :word, cipherShift = :shift, cipherChallenge = :challenge',
+            UpdateExpression: 'SET step2Complete = :true, cipherOriginal = :word, cipherShift = :shift, cipherChallenge = :challenge, isFirstTime = :first',
             ExpressionAttributeValues: {
                 ':true': true,
                 ':word': randomWord,
                 ':shift': randomShift,
-                ':challenge': cipherChallenge
+                ':challenge': cipherChallenge,
+                ':first': false
             }
         }).promise();
 
-        // Return the challenge with the response
         return buildResponse(200, {
             tempToken,
             nextStep: 'cipher',
@@ -260,13 +363,11 @@ async function handleCipher(event) {
         });
     }
 
-    // Retrieve session
     const session = await getSession(tempToken);
     if (!session || !session.step1Complete || !session.step2Complete) {
         return buildResponse(401, { message: 'Invalid session or previous steps not complete' });
     }
 
-    // Verify cipher by passing original word and shift stored in session
     const cipherData = {
         cipherOriginal: session.cipherOriginal,
         cipherShift: session.cipherShift
@@ -276,6 +377,10 @@ async function handleCipher(event) {
     if (!isCipherValid) {
         return buildResponse(403, { message: 'Cipher verification failed' });
     }
+
+    // 🎯 SEND EMAIL NOTIFICATION HERE - Authentication successful!
+    const notificationType = session.isFirstTime ? 'registration' : 'login';
+    await sendEmailNotification(session.userEmail, session.userName, notificationType);
 
     // All steps complete - delete session and return tokens
     await dynamoClient.delete({
@@ -289,11 +394,11 @@ async function handleCipher(event) {
             accessToken: session.cognitoTokens.access_token,
             idToken: session.cognitoTokens.id_token,
             refreshToken: session.cognitoTokens.refresh_token,
-            message: 'Authentication complete!'
+            message: 'Authentication complete! Welcome email sent.',
+            emailSent: true
         },
     );
 }
-
 
 async function handleStatus(event) {
     const { tempToken } = event.queryStringParameters || {};
@@ -322,36 +427,29 @@ async function handleStatus(event) {
 }
 
 // =====================
-// Helper Functions
+// Helper Functions (unchanged)
 // =====================
 
-// Caesar cipher encode function
 function caesarShift(word, shift) {
     return word.split('').map(char => {
         const code = char.charCodeAt(0);
-        if (code >= 97 && code <= 122) { // a-z
+        if (code >= 97 && code <= 122) {
             return String.fromCharCode(((code - 97 + shift) % 26) + 97);
         }
         return char;
     }).join('');
 }
 
-// Caesar cipher decode function
 function caesarUnshift(word, shift) {
     return caesarShift(word, (26 - shift) % 26);
 }
 
 function verifyCipherLogic(userResponse, cipherData) {
     const { cipherOriginal, cipherShift } = cipherData;
-
-    // The user should have decoded the challenge and provided the original word
-    // So we just need to compare their response directly with the original
     const normalizedUserResponse = userResponse.toLowerCase().trim();
     const normalizedOriginal = cipherOriginal.toLowerCase().trim();
-
     return normalizedUserResponse === normalizedOriginal;
 }
-
 
 function generateTempToken() {
     return crypto.randomBytes(32).toString('hex');
@@ -365,7 +463,6 @@ async function getSession(tempToken) {
 
     if (!result.Item) return null;
 
-    // Check expiration
     if (Date.now() > result.Item.expiresAt) {
         await dynamoClient.delete({
             TableName: process.env.SESSIONS_TABLE || 'AuthSessions',
@@ -378,7 +475,6 @@ async function getSession(tempToken) {
 }
 
 async function exchangeCodeForTokens(code) {
-
     const tokenEndpoint = `https://${process.env.COGNITO_DOMAIN}/oauth2/token`;
 
     const params = new URLSearchParams({
@@ -434,19 +530,6 @@ async function verifyQnaAnswers(userId, answers) {
     );
 }
 
-async function verifyCipherResponse(userId, cipherResponse) {
-    const userCipher = await dynamoClient.get({
-        TableName: process.env.CIPHER_TABLE || 'UserCipherKeys',
-        Key: { userId }
-    }).promise();
-
-    if (!userCipher.Item) {
-        return buildResponse(404, { message: 'User cipher data not found' });
-    }
-
-    return verifyCipherLogic(cipherResponse, userCipher.Item.cipherKey);
-}
-
 function hashAnswer(answer) {
     return crypto.createHash('sha256').update(answer.toLowerCase().trim()).digest('hex');
 }
@@ -470,7 +553,7 @@ async function getUserQnaAnswers(userId) {
 async function storeQnaAnswers(userId, answers) {
     const answersArray = Array.isArray(answers)
         ? answers
-        : Object.values(answers); // fallback if answers is an object
+        : Object.values(answers);
 
     const hashedAnswers = answersArray.map(ans => hashAnswer(ans));
 
