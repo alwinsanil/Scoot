@@ -5,6 +5,7 @@ import QnA from './pages/auth/QnA';
 import Owner from './pages/Owner';
 import User from './pages/User';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
+import ChatBot from './pages/ChatBot';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/auth/cipher/callback" element={<Cipher />} />
         <Route path="/analytics" element={<AnalyticsDashboard />} />
       </Routes>
+      <ChatBot />
     </BrowserRouter>
   );
 }
