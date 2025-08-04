@@ -22,6 +22,7 @@ resource "aws_lambda_function" "auth_api" {
       COGNITO_CLIENT_SECRET = var.cognito_client_secret
       COGNITO_DOMAIN        = "${var.cognito_domain}.auth.${var.aws_region}.amazoncognito.com"
       REDIRECT_URI          = "${var.api_url}/auth/callback"
+      SNS_TOPIC_ARN         = var.sns_arn
     }
   }
 
