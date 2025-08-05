@@ -58,7 +58,7 @@ function ChatBot() {
     }
   };
 
-  // === Concern Submission Flow ===
+  // Concern Submission Flow
   const handleConcernStep = async (text) => {
     if (concernStep === 0) {
       setConcernData({ ...concernData, what: text });
@@ -81,8 +81,7 @@ function ChatBot() {
     }
   };
 
-  // === Feedback Handler ===
-  // Replace your existing handleFeedback function in ChatBot.jsx with this:
+  // Feedback Handler
 
 const handleFeedback = async (text) => {
   setIsLoading(true);
@@ -93,7 +92,7 @@ const handleFeedback = async (text) => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const apiUrl = isLocal 
       ? "http://localhost:7071/api/submit_feedback"
-      : "https://YOUR_AZURE_FUNCTION_APP.azurewebsites.net/api/submit_feedback"; // Replace with your actual Azure Function App URL
+      : "https://YOUR_AZURE_FUNCTION_APP.azurewebsites.net/api/submit_feedback";
     
     console.log(`Using ${isLocal ? 'local' : 'deployed'} API:`, apiUrl);
     
@@ -103,7 +102,7 @@ const handleFeedback = async (text) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        user_id: "user42", // You can make this dynamic based on actual user
+        user_id: "user42",
         message: text
       }),
     });
@@ -187,7 +186,7 @@ const handleFeedback = async (text) => {
 };
 
 
-  // === Help Handler ===
+  // Help Handler
   const handleHelp = async (text) => {
     const helpTopics = {
       "unlock": "🔓 To unlock a scooter: Open the app → Scan QR code → Press unlock button",
@@ -216,7 +215,6 @@ const handleFeedback = async (text) => {
     }
 
     setMessages((msgs) => [...msgs, { from: "bot", text: response }]);
-    // Don't reset mode for help - allow multiple questions
   };
 
   // Submit Concern to AWS API
@@ -275,7 +273,7 @@ const submitConcern = async (data) => {
 };
 
 
-  // Option click handler - NOW HANDLES ALL OPTIONS
+  // Option click handler
   const handleOptionClick = (type) => {
     if (type === "concern") {
       setMode("concern");
