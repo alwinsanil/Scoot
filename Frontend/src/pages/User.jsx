@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Clock, MapPin, Battery, Star, Filter, X, Plus, Edit, Trash2, Eye, Car, Bike, AlertCircle, MessageSquare, ThumbsUp, ThumbsDown, Send, CheckCircle, ChevronDown, ChevronUp, Users, BarChart3, LogIn, LogOut } from 'lucide-react';
-import { redirectBaseUri,cognitoConfig } from '../contants/constants';
+import { redirectBaseUri, cognitoConfig } from '../contants/constants';
 
 const User = () => {
   // State management
@@ -14,11 +14,12 @@ const User = () => {
   const [feedbackAnalytics, setFeedbackAnalytics] = useState([]);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const [analyticsFilters, setAnalyticsFilters] = useState({
     sentiment: '',
     rating: '',
     severity: '',
-    vehicleId: ''  
+    vehicleId: ''
   });
 
   // Modal states
@@ -69,7 +70,11 @@ const User = () => {
 
   // Check authentication on mount
   useEffect(() => {
-    setIsAuthenticated(!!sessionStorage.getItem('jwt'));
+    const isAuth = !!sessionStorage.getItem('jwt');
+    setIsAuthenticated(isAuth);
+    if (isAuth) {
+      checkUserRole();
+    }
   }, []);
 
   // Load data based on active tab
@@ -91,6 +96,24 @@ const User = () => {
   }, [showFeedbackAnalyticsModal, analyticsFilters]);
 
   // API Functions
+
+  const checkUserRole = () => {
+    const token = sessionStorage.getItem('jwt');
+    if (token) {
+      try {
+        // Decode JWT to get role (assuming it's in the payload)
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setUserRole(payload.role || payload['cognito:groups']?.[0] || null);
+        console.log('User role:', payload.role || payload['cognito:groups']?.[0] || null);
+      } catch (error) {
+        console.error('Error decoding token:', error);
+        setUserRole(null);
+      }
+    } else {
+      setUserRole(null);
+    }
+  };
+
   const loadVehicles = async () => {
     setLoading(true);
     setError(null);
@@ -259,6 +282,7 @@ const User = () => {
     // Clear any stored tokens/session data
     sessionStorage.clear();
     localStorage.clear();
+    setUserRole(null);
 
     // Redirect to Cognito logout
     const logoutUrl = `${cognitoConfig.logoutUrl}?client_id=${cognitoConfig.clientId}&logout_uri=${encodeURIComponent(window.location.origin)}`;
@@ -523,6 +547,24 @@ const User = () => {
                   >
                     Feedback
                   </button>
+
+                  {/* Owner-only buttons */}
+                  {userRole === 'owners' && (
+                    <>
+                      <button
+                        onClick={() => window.location.href = '/owner'}
+                        className="px-3 py-2 text-sm font-medium text-purple-600 hover:text-purple-700 border border-purple-200 rounded-md hover:bg-purple-50"
+                      >
+                        Owner Dashboard
+                      </button>
+                      <button
+                        onClick={() => window.location.href = '/analytics'}
+                        className="px-3 py-2 text-sm font-medium text-green-600 hover:text-green-700 border border-green-200 rounded-md hover:bg-green-50"
+                      >
+                        Analytics
+                      </button>
+                    </>
+                  )}
                 </>
               )}
 
