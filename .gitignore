@@ -8,3 +8,9 @@ Backend/Routes/auth/node_modules
 Backend/Routes/owner/node_modules
 Backend/Routes/user/node_modules
 Backend/Routes/guest/node_modules
+
+local.settings.json
+local.settings.json.backup
+*.tfvars
+terraform.tfstate*
+.env
