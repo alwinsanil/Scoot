@@ -1,11 +1,11 @@
 # Outputs
-output "dalscooter_api_url" {
-  description = "Dalscooter API Gateway URL"
+output "scoot_api_url" {
+  description = "Scoot API Gateway URL"
   value       = module.api_gateway.api_url
 }
 
-output "dalscooter_api_id" {
-  description = "Dalscooter API Gateway ID"
+output "scoot_api_id" {
+  description = "Scoot API Gateway ID"
   value       = module.api_gateway.api_id
 }
 

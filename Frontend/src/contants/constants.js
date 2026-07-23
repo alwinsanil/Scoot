@@ -1,10 +1,10 @@
-const redirectBaseUri = 'https://27y5d88znf.execute-api.us-east-1.amazonaws.com';
+const redirectBaseUri = 'https://bu163qsqe6.execute-api.us-east-1.amazonaws.com';
 const cognitoConfig = {
-    clientId: '2lg7ibg0kuj53brvmudl1b6mee',
+    clientId: '5iq7f5dptcr06qmto60mnvftdl',
     redirectUri: `${redirectBaseUri}/dev/auth/callback`,
-    authUrl: 'https://dalscooter-auth-47700.auth.us-east-1.amazoncognito.com/oauth2/authorize',
-    signupUrl: 'https://dalscooter-auth-47700.auth.us-east-1.amazoncognito.com/signup',
-    logoutUrl: 'https://dalscooter-auth-47700.auth.us-east-1.amazoncognito.com/logout',
+    authUrl: 'https://scoot-auth-76410.auth.us-east-1.amazoncognito.com/oauth2/authorize',
+    signupUrl: 'https://scoot-auth-76410.auth.us-east-1.amazoncognito.com/signup',
+    logoutUrl: 'https://scoot-auth-76410.auth.us-east-1.amazoncognito.com/logout',
     scope: 'email openid profile'
   };
 export { redirectBaseUri, cognitoConfig };

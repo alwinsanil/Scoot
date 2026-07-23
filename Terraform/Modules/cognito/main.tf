@@ -2,7 +2,7 @@
 
 # AWS Cognito User Pool
 // cognito/main.tf
-resource "aws_cognito_user_pool" "dalscooter" {
+resource "aws_cognito_user_pool" "scoot" {
   name = var.cognito_user_pool_name
 
   # Password policy
@@ -84,15 +84,15 @@ resource "aws_cognito_user_pool" "dalscooter" {
   }
 
   tags = {
-    Name        = "DalscooterUserPool"
+    Name        = "ScootUserPool"
     Environment = "development"
   }
 }
 
 # AWS Cognito User Pool Client
 resource "aws_cognito_user_pool_client" "client" {
-  name         = "DalscooterAppClient"
-  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  name         = "ScootAppClient"
+  user_pool_id = aws_cognito_user_pool.scoot.id
 
   # App client settings
   generate_secret = true
@@ -153,8 +153,8 @@ resource "random_integer" "domain_suffix" {
 
 # User Pool Domain
 resource "aws_cognito_user_pool_domain" "domain" {
-  domain       = "dalscooter-auth-${random_integer.domain_suffix.result}"
-  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  domain       = "scoot-auth-${random_integer.domain_suffix.result}"
+  user_pool_id = aws_cognito_user_pool.scoot.id
 }
 
 # ========================================
@@ -165,7 +165,7 @@ resource "aws_cognito_user_pool_domain" "domain" {
 # Users Group - Standard app users
 resource "aws_cognito_user_group" "users" {
   name         = "users"
-  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  user_pool_id = aws_cognito_user_pool.scoot.id
   description  = "Standard users who can rent scooters"
   precedence   = 10  # Lower precedence (higher number)
 }
@@ -173,7 +173,7 @@ resource "aws_cognito_user_group" "users" {
 # Owners Group - Scooter owners who can list their scooters
 resource "aws_cognito_user_group" "owners" {
   name         = "owners"
-  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  user_pool_id = aws_cognito_user_pool.scoot.id
   description  = "Scooter owners who can list and manage their scooters"
   precedence   = 5   # Higher precedence (lower number)
 }
@@ -181,7 +181,7 @@ resource "aws_cognito_user_group" "owners" {
 # Admins Group - System administrators (optional)
 resource "aws_cognito_user_group" "admins" {
   name         = "admins"
-  user_pool_id = aws_cognito_user_pool.dalscooter.id
+  user_pool_id = aws_cognito_user_pool.scoot.id
   description  = "System administrators with full access"
   precedence   = 1   # Highest precedence (lowest number)
 }

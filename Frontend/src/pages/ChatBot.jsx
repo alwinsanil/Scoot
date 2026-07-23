@@ -33,7 +33,7 @@ function ChatBot() {
   // Welcome message
   useEffect(() => {
     if (open && messages.length === 0) {
-      setMessages([{ from: "bot", text: "Hello! I'm the DALScooter Assistant. How can I help you today?" }]);
+      setMessages([{ from: "bot", text: "Hello! I'm the Scoot Assistant. How can I help you today?" }]);
     }
   }, [open, messages.length]);
 
@@ -153,7 +153,7 @@ const handleFeedback = async (text) => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const apiUrl = isLocal 
       ? `http://localhost:7071/api/get_booking?booking_id=${text}`
-      : `https://dalscooter-botfunc.azurewebsites.net/api/get_booking?booking_id=${text}`;
+      : `https://scoot-botfunc.azurewebsites.net/api/get_booking?booking_id=${text}`;
 
     const res = await fetch(apiUrl, { method: "GET" });
 
@@ -193,7 +193,7 @@ const handleFeedback = async (text) => {
       "payment": "💳 Payment: We accept credit cards, debit cards, and PayPal through the app",
       "parking": "🅿️ Parking: Please park in designated areas and avoid blocking walkways",
       "safety": "🦺 Safety: Always wear a helmet, follow traffic rules, and ride in bike lanes when available",
-      "support": "📞 Support: Contact us at support@dalscooter.com or call 1-800-SCOOTER"
+      "support": "📞 Support: Contact us at support@scoot.com or call 1-800-SCOOTER"
     };
 
     const lowerText = text.toLowerCase();
@@ -323,7 +323,7 @@ const submitConcern = async (data) => {
         <div className="chatbot-window">
           <div className="chatbot-header">
             <div>
-              <div style={{ fontWeight: "bold" }}>DALScooter Assistant</div>
+              <div style={{ fontWeight: "bold" }}>Scoot Assistant</div>
               <div style={{ fontSize: "12px", opacity: 0.9 }}>
                 {mode !== "default" ? `Mode: ${mode}` : "Online now"}
               </div>

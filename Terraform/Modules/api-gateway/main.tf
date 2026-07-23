@@ -3,9 +3,9 @@
 data "aws_region" "current" {}
 
 # API Gateway REST API
-resource "aws_api_gateway_rest_api" "dalscooter_api" {
+resource "aws_api_gateway_rest_api" "scoot_api" {
   name        = "${var.project_name}-${var.environment}-api"
-  description = "Dalscooter API Gateway with Cognito auth"
+  description = "Scoot API Gateway with Cognito auth"
   endpoint_configuration { types = ["REGIONAL"] }
   
   tags = {
@@ -19,7 +19,7 @@ resource "aws_api_gateway_rest_api" "dalscooter_api" {
 resource "aws_api_gateway_authorizer" "cognito" {
   name          = "cognito-authorizer"
   type          = "COGNITO_USER_POOLS"
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   provider_arns = [var.cognito_user_pool_arn]
 }
 
@@ -27,26 +27,26 @@ resource "aws_api_gateway_authorizer" "cognito" {
 # PUBLIC GUEST ROUTES
 # ======================
 resource "aws_api_gateway_resource" "guest" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  parent_id   = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  parent_id   = aws_api_gateway_rest_api.scoot_api.root_resource_id
   path_part   = "guest"
 }
 
 resource "aws_api_gateway_resource" "guest_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   parent_id   = aws_api_gateway_resource.guest.id
   path_part   = "{proxy+}"
 }
 
 resource "aws_api_gateway_method" "guest_any" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.guest_proxy.id
   http_method   = "ANY"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "guest_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id             = aws_api_gateway_rest_api.scoot_api.id
   resource_id             = aws_api_gateway_resource.guest_proxy.id
   http_method             = aws_api_gateway_method.guest_any.http_method
   integration_http_method = "POST"
@@ -56,14 +56,14 @@ resource "aws_api_gateway_integration" "guest_integration" {
 
 # GUEST OPTIONS (CORS)
 resource "aws_api_gateway_method" "guest_options" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.guest_proxy.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "guest_options_integration" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.guest_proxy.id
   http_method = aws_api_gateway_method.guest_options.http_method
   type        = "MOCK"
@@ -74,7 +74,7 @@ resource "aws_api_gateway_integration" "guest_options_integration" {
 }
 
 resource "aws_api_gateway_method_response" "guest_options_200" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.guest_proxy.id
   http_method = aws_api_gateway_method.guest_options.http_method
   status_code = "200"
@@ -87,7 +87,7 @@ resource "aws_api_gateway_method_response" "guest_options_200" {
 }
 
 resource "aws_api_gateway_integration_response" "guest_options_response" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.guest_proxy.id
   http_method = aws_api_gateway_method.guest_options.http_method
   status_code = aws_api_gateway_method_response.guest_options_200.status_code
@@ -103,19 +103,19 @@ resource "aws_api_gateway_integration_response" "guest_options_response" {
 # AUTH ROUTES
 # ======================
 resource "aws_api_gateway_resource" "auth" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  parent_id   = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  parent_id   = aws_api_gateway_rest_api.scoot_api.root_resource_id
   path_part   = "auth"
 }
 
 resource "aws_api_gateway_resource" "auth_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   parent_id   = aws_api_gateway_resource.auth.id
   path_part   = "{proxy+}"
 }
 
 resource "aws_api_gateway_method" "auth_any" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.auth_proxy.id
   http_method   = "ANY"
   authorization = "NONE"
@@ -127,7 +127,7 @@ resource "aws_api_gateway_method" "auth_any" {
 }
 
 resource "aws_api_gateway_integration" "auth_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id             = aws_api_gateway_rest_api.scoot_api.id
   resource_id             = aws_api_gateway_resource.auth_proxy.id
   http_method             = aws_api_gateway_method.auth_any.http_method
   integration_http_method = "POST"
@@ -142,14 +142,14 @@ resource "aws_api_gateway_integration" "auth_integration" {
 
 # AUTH OPTIONS (CORS)
 resource "aws_api_gateway_method" "auth_options" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.auth_proxy.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "auth_options_integration" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.auth_proxy.id
   http_method = aws_api_gateway_method.auth_options.http_method
   type        = "MOCK"
@@ -160,7 +160,7 @@ resource "aws_api_gateway_integration" "auth_options_integration" {
 }
 
 resource "aws_api_gateway_method_response" "auth_options_200" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.auth_proxy.id
   http_method = aws_api_gateway_method.auth_options.http_method
   status_code = "200"
@@ -173,7 +173,7 @@ resource "aws_api_gateway_method_response" "auth_options_200" {
 }
 
 resource "aws_api_gateway_integration_response" "auth_options_response" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.auth_proxy.id
   http_method = aws_api_gateway_method.auth_options.http_method
   status_code = aws_api_gateway_method_response.auth_options_200.status_code
@@ -189,19 +189,19 @@ resource "aws_api_gateway_integration_response" "auth_options_response" {
 # PROTECTED USER ROUTES
 # ======================
 resource "aws_api_gateway_resource" "user" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  parent_id   = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  parent_id   = aws_api_gateway_rest_api.scoot_api.root_resource_id
   path_part   = "user"
 }
 
 resource "aws_api_gateway_resource" "user_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   parent_id   = aws_api_gateway_resource.user.id
   path_part   = "{proxy+}"
 }
 
 resource "aws_api_gateway_method" "user_any" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.user_proxy.id
   http_method   = "ANY"
   authorization = "COGNITO_USER_POOLS"
@@ -209,7 +209,7 @@ resource "aws_api_gateway_method" "user_any" {
 }
 
 resource "aws_api_gateway_integration" "user_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id             = aws_api_gateway_rest_api.scoot_api.id
   resource_id             = aws_api_gateway_resource.user_proxy.id
   http_method             = aws_api_gateway_method.user_any.http_method
   integration_http_method = "POST"
@@ -219,14 +219,14 @@ resource "aws_api_gateway_integration" "user_integration" {
 
 # USER OPTIONS (CORS)
 resource "aws_api_gateway_method" "user_options" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.user_proxy.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "user_options_integration" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.user_proxy.id
   http_method = aws_api_gateway_method.user_options.http_method
   type        = "MOCK"
@@ -237,7 +237,7 @@ resource "aws_api_gateway_integration" "user_options_integration" {
 }
 
 resource "aws_api_gateway_method_response" "user_options_200" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.user_proxy.id
   http_method = aws_api_gateway_method.user_options.http_method
   status_code = "200"
@@ -250,7 +250,7 @@ resource "aws_api_gateway_method_response" "user_options_200" {
 }
 
 resource "aws_api_gateway_integration_response" "user_options_response" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.user_proxy.id
   http_method = aws_api_gateway_method.user_options.http_method
   status_code = aws_api_gateway_method_response.user_options_200.status_code
@@ -266,19 +266,19 @@ resource "aws_api_gateway_integration_response" "user_options_response" {
 # PROTECTED OWNER ROUTES
 # ======================
 resource "aws_api_gateway_resource" "owner" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  parent_id   = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  parent_id   = aws_api_gateway_rest_api.scoot_api.root_resource_id
   path_part   = "owner"
 }
 
 resource "aws_api_gateway_resource" "owner_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   parent_id   = aws_api_gateway_resource.owner.id
   path_part   = "{proxy+}"
 }
 
 resource "aws_api_gateway_method" "owner_any" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.owner_proxy.id
   http_method   = "ANY"
   authorization = "COGNITO_USER_POOLS"
@@ -286,7 +286,7 @@ resource "aws_api_gateway_method" "owner_any" {
 }
 
 resource "aws_api_gateway_integration" "owner_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id             = aws_api_gateway_rest_api.scoot_api.id
   resource_id             = aws_api_gateway_resource.owner_proxy.id
   http_method             = aws_api_gateway_method.owner_any.http_method
   integration_http_method = "POST"
@@ -296,14 +296,14 @@ resource "aws_api_gateway_integration" "owner_integration" {
 
 # OWNER OPTIONS (CORS)
 resource "aws_api_gateway_method" "owner_options" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
   resource_id   = aws_api_gateway_resource.owner_proxy.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "owner_options_integration" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.owner_proxy.id
   http_method = aws_api_gateway_method.owner_options.http_method
   type        = "MOCK"
@@ -314,7 +314,7 @@ resource "aws_api_gateway_integration" "owner_options_integration" {
 }
 
 resource "aws_api_gateway_method_response" "owner_options_200" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.owner_proxy.id
   http_method = aws_api_gateway_method.owner_options.http_method
   status_code = "200"
@@ -327,7 +327,7 @@ resource "aws_api_gateway_method_response" "owner_options_200" {
 }
 
 resource "aws_api_gateway_integration_response" "owner_options_response" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   resource_id = aws_api_gateway_resource.owner_proxy.id
   http_method = aws_api_gateway_method.owner_options.http_method
   status_code = aws_api_gateway_method_response.owner_options_200.status_code
@@ -343,15 +343,15 @@ resource "aws_api_gateway_integration_response" "owner_options_response" {
 # ROOT CORS CONFIGURATION
 # ======================
 resource "aws_api_gateway_method" "options_method" {
-  rest_api_id   = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id   = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id   = aws_api_gateway_rest_api.scoot_api.id
+  resource_id   = aws_api_gateway_rest_api.scoot_api.root_resource_id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_integration" "options_integration" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  resource_id = aws_api_gateway_rest_api.scoot_api.root_resource_id
   http_method = aws_api_gateway_method.options_method.http_method
   type        = "MOCK"
   
@@ -361,8 +361,8 @@ resource "aws_api_gateway_integration" "options_integration" {
 }
 
 resource "aws_api_gateway_method_response" "options_200" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  resource_id = aws_api_gateway_rest_api.scoot_api.root_resource_id
   http_method = aws_api_gateway_method.options_method.http_method
   status_code = "200"
 
@@ -374,8 +374,8 @@ resource "aws_api_gateway_method_response" "options_200" {
 }
 
 resource "aws_api_gateway_integration_response" "options_integration_response" {
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
-  resource_id = aws_api_gateway_rest_api.dalscooter_api.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
+  resource_id = aws_api_gateway_rest_api.scoot_api.root_resource_id
   http_method = aws_api_gateway_method.options_method.http_method
   status_code = aws_api_gateway_method_response.options_200.status_code
 
@@ -402,7 +402,7 @@ resource "aws_api_gateway_deployment" "deployment" {
     aws_api_gateway_integration.auth_options_integration
   ]
 
-  rest_api_id = aws_api_gateway_rest_api.dalscooter_api.id
+  rest_api_id = aws_api_gateway_rest_api.scoot_api.id
   stage_name  = var.environment
 
   triggers = {
@@ -437,7 +437,7 @@ resource "aws_lambda_permission" "api_gw_user" {
   action        = "lambda:InvokeFunction"
   function_name = var.lambda_user_function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.dalscooter_api.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.scoot_api.execution_arn}/*/*"
 }
 
 resource "aws_lambda_permission" "api_gw_owner" {
@@ -445,7 +445,7 @@ resource "aws_lambda_permission" "api_gw_owner" {
   action        = "lambda:InvokeFunction"
   function_name = var.lambda_function_owner_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.dalscooter_api.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.scoot_api.execution_arn}/*/*"
 }
 
 resource "aws_lambda_permission" "api_gw_guest" {
@@ -453,7 +453,7 @@ resource "aws_lambda_permission" "api_gw_guest" {
   action        = "lambda:InvokeFunction"
   function_name = var.lambda_guest_function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.dalscooter_api.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.scoot_api.execution_arn}/*/*"
 }
 
 resource "aws_lambda_permission" "api_gw_auth" {
@@ -461,5 +461,5 @@ resource "aws_lambda_permission" "api_gw_auth" {
   action        = "lambda:InvokeFunction"
   function_name = var.lambda_function_auth_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.dalscooter_api.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.scoot_api.execution_arn}/*/*"
 }

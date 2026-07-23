@@ -519,7 +519,7 @@ const User = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
               <Car className="w-8 h-8 text-blue-600" />
-              <h1 className="text-xl font-bold text-gray-900">Dalscooter</h1>
+              <h1 className="text-xl font-bold text-gray-900">Scoot</h1>
             </div>
 
             <nav className="flex space-x-8">

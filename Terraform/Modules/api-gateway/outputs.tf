@@ -1,11 +1,11 @@
 output "api_url" {
-  description = "Dalscooter API Gateway base URL"
-  value       = "https://${aws_api_gateway_rest_api.dalscooter_api.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${var.environment}"
+  description = "Scoot API Gateway base URL"
+  value       = "https://${aws_api_gateway_rest_api.scoot_api.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${var.environment}"
 }
 
 output "api_id" {
-  description = "Dalscooter API Gateway ID"
-  value       = aws_api_gateway_rest_api.dalscooter_api.id
+  description = "Scoot API Gateway ID"
+  value       = aws_api_gateway_rest_api.scoot_api.id
 }
 
 output "stage_name" {
@@ -30,5 +30,5 @@ output "user_resource_path" {
 
 output "execution_arn" {
   description = "API Gateway execution ARN"
-  value       = aws_api_gateway_rest_api.dalscooter_api.execution_arn
+  value       = aws_api_gateway_rest_api.scoot_api.execution_arn
 }

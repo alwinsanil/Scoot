@@ -1,7 +1,7 @@
 
 output "user_pool_id" {
   description = "The ID of the Cognito User Pool"
-  value       = aws_cognito_user_pool.dalscooter.id
+  value       = aws_cognito_user_pool.scoot.id
 }
 
 output "client_id" {
@@ -27,12 +27,12 @@ output "login_url" {
 
 output "cognito_user_pool_arn" {
   description = "The ARN of the Cognito User Pool"
-  value       = aws_cognito_user_pool.dalscooter.arn
+  value       = aws_cognito_user_pool.scoot.arn
 }
 
 output "cognito_user_pool_name" {
   description = "The name of the Cognito User Pool"
-  value       = aws_cognito_user_pool.dalscooter.name
+  value       = aws_cognito_user_pool.scoot.name
 }
 
 output "user_pool_domain_cloudfront_distribution_arn" {

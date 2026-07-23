@@ -4,12 +4,12 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "rg" {
-  name     = "rg-dalscooter-bot"
+  name     = "rg-scoot-bot"
   location = "Canada Central"
 }
 
 resource "azurerm_storage_account" "sa" {
-  name                     = "dalscooterfuncsa01"
+  name                     = "scootfuncsa01"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
@@ -17,7 +17,7 @@ resource "azurerm_storage_account" "sa" {
 }
 
 resource "azurerm_service_plan" "plan" {
-  name                = "dalscooter-plan"
+  name                = "scoot-plan"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   os_type             = "Linux"
@@ -25,7 +25,7 @@ resource "azurerm_service_plan" "plan" {
 }
 
 resource "azurerm_linux_function_app" "function" {
-  name                       = "dalscooter-botfunc"
+  name                       = "scoot-botfunc"
   location                   = azurerm_resource_group.rg.location
   resource_group_name        = azurerm_resource_group.rg.name
   service_plan_id            = azurerm_service_plan.plan.id
@@ -45,7 +45,7 @@ resource "azurerm_linux_function_app" "function" {
 }
 
 resource "azurerm_cosmosdb_account" "cosmos" {
-  name                = "dalscootercosmos${random_integer.rand.result}"
+  name                = "scootcosmos${random_integer.rand.result}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   offer_type          = "Standard"
@@ -62,7 +62,7 @@ resource "azurerm_cosmosdb_account" "cosmos" {
 }
 
 resource "azurerm_cosmosdb_sql_database" "db" {
-  name                = "dalscooterdb"
+  name                = "scootdb"
   resource_group_name = azurerm_resource_group.rg.name
   account_name        = azurerm_cosmosdb_account.cosmos.name
 }

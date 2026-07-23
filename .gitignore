@@ -14,3 +14,5 @@ VA/local.settings.json.backup
 *.tfvars
 terraform.tfstate*
 *.tfstate*
+
+.DS_Store

@@ -116,16 +116,16 @@ async function sendEmailNotification(userEmail, userName, notificationType) {
         
         switch (notificationType) {
             case 'registration':
-                subject = 'Welcome to DalScooter! 🛴';
-                message = `Hello ${userName},\n\nWelcome to DalScooter! 🎉\n\nYour account has been successfully registered and verified. You can now start using our platform to book scooters and explore the city!\n\nWhat you can do next:\n• Download our mobile app\n• Find nearby scooters\n• Start your first ride\n\nIf you have any questions, feel free to contact our support team.\n\nHappy riding!\nThe DalScooter Team 🛴`;
+                subject = 'Welcome to Scoot! 🛴';
+                message = `Hello ${userName},\n\nWelcome to Scoot! 🎉\n\nYour account has been successfully registered and verified. You can now start using our platform to book scooters and explore the city!\n\nWhat you can do next:\n• Download our mobile app\n• Find nearby scooters\n• Start your first ride\n\nIf you have any questions, feel free to contact our support team.\n\nHappy riding!\nThe Scoot Team 🛴`;
                 break;
             case 'login':
-                subject = 'Login Alert - DalScooter';
-                message = `Hello ${userName},\n\nYou have successfully logged into your DalScooter account.\n\nLogin details:\n• Time: ${new Date().toLocaleString()}\n• Account: ${userEmail}\n\nIf this wasn't you, please contact our support team immediately.\n\nStay safe and ride responsibly!\nThe DalScooter Team`;
+                subject = 'Login Alert - Scoot';
+                message = `Hello ${userName},\n\nYou have successfully logged into your Scoot account.\n\nLogin details:\n• Time: ${new Date().toLocaleString()}\n• Account: ${userEmail}\n\nIf this wasn't you, please contact our support team immediately.\n\nStay safe and ride responsibly!\nThe Scoot Team`;
                 break;
             default:
-                subject = 'DalScooter Account Activity';
-                message = `Hello ${userName},\n\nThere has been activity on your DalScooter account.\n\nActivity time: ${new Date().toLocaleString()}\n\nIf you have any concerns, please contact our support team.\n\nBest regards,\nThe DalScooter Team`;
+                subject = 'Scoot Account Activity';
+                message = `Hello ${userName},\n\nThere has been activity on your Scoot account.\n\nActivity time: ${new Date().toLocaleString()}\n\nIf you have any concerns, please contact our support team.\n\nBest regards,\nThe Scoot Team`;
         }
 
         // Only send if subscription is confirmed
