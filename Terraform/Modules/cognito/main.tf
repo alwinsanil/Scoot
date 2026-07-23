@@ -98,9 +98,16 @@ resource "aws_cognito_user_pool_client" "client" {
   generate_secret = true
   
   # OAuth settings
-  callback_urls = ["https://27y5d88znf.execute-api.us-east-1.amazonaws.com/dev/auth/callback"]
-  logout_urls   = ["http://localhost:5173"]
-  default_redirect_uri = "https://27y5d88znf.execute-api.us-east-1.amazonaws.com/dev/auth/callback"
+  callback_urls = [
+    "${var.api_url}/auth/callback",
+    "https://main.d1c997xz3yo4ro.amplifyapp.com",
+    "https://main.d1c997xz3yo4ro.amplifyapp.com/auth/callback"
+  ]
+  logout_urls   = [
+    "http://localhost:5173",
+    "https://main.d1c997xz3yo4ro.amplifyapp.com"
+  ]
+  default_redirect_uri = "${var.api_url}/auth/callback"
   
   allowed_oauth_flows = ["code"]
   allowed_oauth_scopes = ["email", "openid", "profile"]
